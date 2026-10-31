@@ -13,7 +13,7 @@
     {value:3,label:'Ni de acuerdo ni en desacuerdo'}, {value:4,label:'De acuerdo'},
     {value:5,label:'Totalmente de acuerdo'}, {value:0,label:'No sé / No aplica'}
   ];
-  const store={status:'none',questions:[],areas:[],cargos:[],answers:{},admin:false,tab:'dashboard',filters:{area:'',cargo:'',turno:''},adminQuestions:[],adminOptions:null,dashboard:null,newCodes:[]};
+  const store={status:'none',questions:[],areas:[],cargos:[],answers:{},admin:false,tab:'dashboard',filters:{area:'',cargo:'',turno:''},adminQuestions:[],adminOptions:null,dashboard:null,newCodes:[],responseFilters:{area:'',cargo:'',turno:'',from:'',to:''}};
   // El comprobante temporal se mantiene solamente durante esta pestaña.
   // No contiene el código original y NO identifica las respuestas guardadas.
   const TICKET_KEY='esm_encuesta_acceso_v3';
@@ -59,7 +59,21 @@
   function renderWorker(error='',success=''){
     const intro=pageIntro();
     if(store.status==='submitted'){
-      root.innerHTML=intro+`<div class="card complete"><div class="check">✓</div><h2>¡Gracias por participar!</h2><p>Tu encuesta fue recibida. No se guarda junto a tu código de acceso.</p>${notice('Los resultados se entregan de manera agrupada, no por persona.')}<a class="button" href="#encuesta">Encuesta finalizada</a></div>`;return;
+      root.innerHTML=intro+`<div class="card complete"><div class="check">✓</div><h2>¡Gracias por participar!</h2><p>Tu encuesta fue recibida. No se guarda junto a tu código de acceso.</p>${notice('Los resultados se entregan de manera agrupada, no por persona.')}<button class="button primary" type="button" id="new-survey">Realizar otra encuesta →</button></div>`;
+      $('#new-survey').addEventListener('click',()=>{
+        // El código anterior permanece consumido en Supabase. Solo se limpia
+        // el comprobante de ESTA pestaña para que participe otra persona.
+        clearTicket();
+        store.status='none';
+        store.answers={};
+        store.questions=[];
+        store.areas=[];
+        store.cargos=[];
+        if(location.hash!=='#encuesta') history.replaceState(null,'',location.pathname+location.search+'#encuesta');
+        renderWorker();
+        window.scrollTo(0,0);
+      });
+      return;
     }
     if(store.status!=='ready'){
       root.innerHTML=intro+`<div class="card entry-card"><div class="section-label">ACCESO CONFIDENCIAL</div><h2>Ingresa a la encuesta</h2><p class="muted">Ingresa únicamente con tu código individual autorizado. No solicitamos contraseña, nombre, RUT ni correo electrónico.</p>
@@ -104,40 +118,232 @@
   async function adminLogout(){await sp.auth.signOut();store.newCodes=[];store.admin=false;store.tab='dashboard';renderLogin();}
   async function renderAdmin(){
     root.innerHTML=`<div class="admin-title"><div><div class="eyebrow">PANEL DE CONTROL ESM</div><h1>Participación y seguridad</h1><p class="muted">Indicadores agrupados · decisiones para la mejora continua</p></div><button class="button" id="logout">Cerrar sesión</button></div>
-      <nav class="admin-tabs" aria-label="Secciones de administración"><button data-tab="dashboard" class="${store.tab==='dashboard'?'active':''}">▤ Resultados</button><button data-tab="questions" class="${store.tab==='questions'?'active':''}">☷ Preguntas</button><button data-tab="codes" class="${store.tab==='codes'?'active':''}">♯ Códigos</button><button data-tab="qr" class="${store.tab==='qr'?'active':''}">▦ Enlace y QR</button></nav><section id="admin-content"></section>`;
+      <nav class="admin-tabs" aria-label="Secciones de administración"><button data-tab="dashboard" class="${store.tab==='dashboard'?'active':''}">▤ Análisis estratégico</button><button data-tab="responses" class="${store.tab==='responses'?'active':''}">◫ Gestión de respuestas</button><button data-tab="questions" class="${store.tab==='questions'?'active':''}">☷ Preguntas</button><button data-tab="codes" class="${store.tab==='codes'?'active':''}">♯ Códigos</button><button data-tab="qr" class="${store.tab==='qr'?'active':''}">▦ Enlace y QR</button></nav><section id="admin-content"></section>`;
     $('#logout').addEventListener('click',adminLogout);
     document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{if(store.tab==='codes' && store.newCodes?.length && !confirm('¿Ya descargaste el lote de códigos? Al salir no podrás volver a visualizarlos.'))return; if(store.tab==='codes')store.newCodes=[];store.tab=el.dataset.tab;renderAdmin();}));
     $('#admin-content').innerHTML='<div class="card loading"><span class="spinner"></span></div>';
-    try{if(store.tab==='dashboard')await adminDashboard();else if(store.tab==='questions')await adminQuestions();else if(store.tab==='codes')await adminCodes();else adminQR();}catch(e){$('#admin-content').innerHTML=`<div class="card">${banner(fail(e))}<button class="button" id="refresh">Reintentar</button></div>`;$('#refresh')?.addEventListener('click',()=>renderAdmin());}
+    try{if(store.tab==='dashboard')await adminDashboard();else if(store.tab==='responses')await adminResponses();else if(store.tab==='questions')await adminQuestions();else if(store.tab==='codes')await adminCodes();else adminQR();}catch(e){$('#admin-content').innerHTML=`<div class="card">${banner(fail(e))}<button class="button" id="refresh">Reintentar</button></div>`;$('#refresh')?.addEventListener('click',()=>renderAdmin());}
   }
   function metric(label,value,desc){return `<article class="metric"><div class="m-label">${esc(label)}</div><strong>${esc(number(value))}</strong><div class="m-sub">${esc(desc)}</div></article>`;}
+  // Dashboard estratégico: el universo son las ENCUESTAS recibidas, jamás los códigos emitidos.
+  const scoreClass=pct=>pct==null?'off':Number(pct)>=80?'':Number(pct)>=60?'warn':'low';
+  const pctText=v=>v==null?'—':number(v)+'%';
+  const mkPill=v=>`<span class="pill ${scoreClass(v)}">${esc(pctText(v))}</span>`;
+  const countValid=x=>Number(x?.valid_n||0);
+  const advice=dim=>{
+    const s=String(dim||'').toLowerCase();
+    if(s.includes('autoridad'))return 'Reforzar la facultad de detener una tarea insegura.';
+    if(s.includes('respaldo')||s.includes('jefatura'))return 'Revisar el respaldo explícito de la supervisión.';
+    if(s.includes('confianza'))return 'Fortalecer una cultura sin represalias y escuchar al equipo.';
+    if(s.includes('conocimiento'))return 'Practicar cómo detener, informar y escalar condiciones inseguras.';
+    if(s.includes('efectividad')||s.includes('gestión'))return 'Verificar correcciones antes de reiniciar los trabajos.';
+    return 'Revisar el resultado con el equipo y acordar medidas verificables.';
+  };
+  function priorityCards(data){
+    const list=[];
+    for(const [axis,title] of [['areas','Área'],['cargos','Cargo'],['turnos','Turno']]){
+      if(data[axis]?.protected)continue;
+      for(const r of data[axis]?.matrix||[]){
+        if(r.favorable_pct==null||Number(r.favorable_pct)>=80||countValid(r)<5)continue;
+        list.push({...r,axis,title});
+      }
+    }
+    list.sort((a,b)=>Number(a.favorable_pct)-Number(b.favorable_pct)||Number(b.valid_n)-Number(a.valid_n));
+    // Evitar tres alertas iguales por la misma combinación.
+    const used=new Set();
+    const cards=[];
+    for(const x of list){
+      const key=x.axis+'|'+x.name+'|'+x.question_id;
+      if(used.has(key))continue;used.add(key);
+      cards.push(`<div class="priority-item"><div><div class="priority-meta">${esc(x.title)} · ${esc(x.name)} · ${esc(x.dimension)} · ${esc(x.valid_n)} respuestas válidas</div><strong>${esc(advice(x.dimension))}</strong></div>${mkPill(x.favorable_pct)}</div>`);
+      if(cards.length===5)break;
+    }
+    if(!cards.length)return '<p class="muted">Sin brechas publicables bajo el criterio interno del 80%. Los segmentos pequeños permanecen protegidos.</p>';
+    return cards.join('');
+  }
+  function axisPanel(axisObj, label, questions, axisType){
+    if(axisObj?.protected)return `<section class="card"><h3>${esc(label)}</h3><p class="muted">Desglose protegido: al menos un grupo tiene menos de 5 encuestas. No mostramos resultados parciales que permitan inferir respuestas.</p></section>`;
+    const segments=axisObj?.segments||[];
+    if(!segments.length)return `<section class="card"><h3>${esc(label)}</h3><p class="muted">Todavía no hay grupos con información suficiente.</p></section>`;
+    const cells=new Map((axisObj.matrix||[]).map(x=>[x.name+'|'+x.question_id,x]));
+    const head=questions.map(q=>`<th title="${esc(q.text)}">P${esc(q.position)} · ${esc(q.dimension)}</th>`).join('');
+    const rows=segments.map(s=>`<tr><th scope="row">${esc(axisType==='turnos'?'Turno '+s.name:s.name)}</th><td>${esc(s.n)}</td><td>${mkPill(s.favorable_pct)}</td>${questions.map(q=>{
+      const v=cells.get(s.name+'|'+q.id);
+      return `<td>${v&&v.favorable_pct!=null?`<span class="heat ${scoreClass(v.favorable_pct)}" title="${esc(q.text)} · ${esc(v.valid_n)} respuestas válidas">${esc(pctText(v.favorable_pct))}</span>`:'<span class="hidden-stat" title="Sin mínimo publicable">—</span>'}</td>`;
+    }).join('')}</tr>`).join('');
+    return `<section class="card strategic-section"><h3>${esc(label)}</h3><p class="note">Ordenado por menor favorabilidad general. Cada celda muestra la favorabilidad de esa pregunta dentro del grupo; “—” indica dato protegido o sin base suficiente.</p>
+      <div class="table-wrap"><table class="table matrix-table"><thead><tr><th>Grupo</th><th>Encuestas</th><th>General</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  }
   async function adminDashboard(){
-    const [opts,data]=await Promise.all([rpc('survey_admin_options'),rpc('survey_admin_dashboard',{p_area:store.filters.area||null,p_cargo:store.filters.cargo||null,p_turno:store.filters.turno||null})]);
+    const args={p_area:store.filters.area||null,p_cargo:store.filters.cargo||null,p_turno:store.filters.turno||null};
+    const [opts,data]=await Promise.all([rpc('survey_admin_options'),rpc('survey_admin_insights',args)]);
     store.adminOptions=opts;store.dashboard=data;
     const f=store.filters;
     const filtered=Object.values(f).some(Boolean);
-    const q=(data.questions||[]).slice().sort((a,b)=>(a.favorable_pct??101)-(b.favorable_pct??101));
-    const max=n=>Math.max(0,Math.min(100,Number(n)||0));
-    const rows=q.map(x=>{const pct=Number(x.favorable_pct);const klass=pct>=80?'':pct>=60?'warn':'low';return `<tr><td>${esc(x.dimension)}</td><td>${esc(x.text)}</td><td>${esc(x.n)}</td><td>${esc(number(x.average))}</td><td><span class="pill ${klass}">${esc(number(x.favorable_pct))}%</span></td><td>${esc(number(x.unfavorable_pct))}%</td></tr>`}).join('');
-    const br=(vals,kind)=>vals?.length?vals.map(x=>`<div class="item-row"><span>${esc(kind==='turnos'?'Turno '+x.name:x.name)}</span><strong>${esc(x.n)} respuestas</strong></div>`).join(''):'<p class="muted">No hay segmentos publicables (mínimo cinco respuestas).</p>';
-    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">DASHBOARD DE EMPODERAMIENTO</div><h2>Resultados de la encuesta</h2><p class="note">Favorabilidad: respuestas 4 y 5, excluyendo “No sé / No aplica”.</p></div><div class="actions"><button class="button" id="export">↓ Exportar CSV</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
+    const q=(data.questions||[]).slice().sort((a,b)=>Number(a.position)-Number(b.position));
+    const ranked=q.slice().sort((a,b)=>Number(a.favorable_pct)-Number(b.favorable_pct));
+    const fmtBar=x=>`<div class="breakdown"><span class="name" title="${esc(x.text)}">${esc(x.dimension)}</span><span class="track"><span class="fill ${scoreClass(x.favorable_pct)}" style="width:${Math.max(0,Math.min(100,Number(x.favorable_pct)||0))}%"></span></span><strong>${esc(pctText(x.favorable_pct))}</strong></div>`;
+    const weak=ranked.find(x=>x.favorable_pct!=null);
+    const detail=q.map(x=>`<tr><td>P${esc(x.position)}</td><td><strong>${esc(x.dimension)}</strong><div class="note">${esc(x.text)}</div></td><td>${esc(x.n)}</td><td>${esc(x.valid_n)}</td><td>${mkPill(x.favorable_pct)}</td><td>${esc(pctText(x.unfavorable_pct))}</td><td>${esc(pctText(x.neutral_pct))}</td><td>${esc(x.na_n)}</td></tr>`).join('');
+    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">DASHBOARD ESTRATÉGICO · ESM</div><h2>¿Dónde debemos reforzar la seguridad?</h2><p class="note">Base: encuestas efectivamente respondidas. Sin metas ni porcentajes calculados sobre los códigos distribuidos.</p></div><div class="actions"><button class="button" id="export">↓ Descargar resumen</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
       <div class="filters"><label class="form-label">Área<select id="filter-area">${selectOptions(opts.areas,f.area,'Todas las áreas')}</select></label><label class="form-label">Cargo<select id="filter-cargo">${selectOptions(opts.cargos,f.cargo,'Todos los cargos')}</select></label><label class="form-label">Turno<select id="filter-turno">${selectOptions(['A','B'],f.turno,'Ambos turnos')}</select></label></div>
-      <div class="metrics">${metric('Códigos creados',data.codes_total,'Total de credenciales únicas')}${metric('Códigos utilizados',data.codes_redeemed,'Códigos activados')}${metric('Encuestas recibidas',data.responses_total,'Respuestas completas')}${metric('Avance sobre códigos',data.codes_total?Math.round(100*data.responses_total/data.codes_total)+'%':'—','No equivale a cobertura real si faltan distribuir códigos')}${metric('Favorabilidad',data.suppressed?'Protegido':number(data.favorable_pct)+'%','Resultados del grupo seleccionado')}</div>
-      ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Datos protegidos</strong><p>En la selección actual hay menos de cinco encuestas. No se muestran resultados por área, cargo ni turno para reducir el riesgo de identificación indirecta.</p><p class="note">Para ver el resumen, quita filtros o reúne más participaciones.</p></div></div>`:
-      `<div class="cols"><div class="card"><h3>Preguntas con menor favorabilidad</h3><p class="note">Cuanto menor el porcentaje, mayor necesidad de revisar esa dimensión.</p>${q.length?q.map(x=>`<div class="breakdown"><span class="name">${esc(x.dimension)}</span><span class="track"><span class="fill" style="display:block;width:${max(x.favorable_pct)}%"></span></span><strong>${esc(number(x.favorable_pct))}%</strong></div>`).join(''):'<p class="muted">Sin resultados suficientes por pregunta.</p>'}</div>
-        <div class="card"><h3>Lectura del resultado</h3><div class="item-row"><span>Promedio general</span><strong>${esc(number(data.average))} / 5</strong></div><div class="item-row"><span>80% a 100%</span><span class="pill">Favorable</span></div><div class="item-row"><span>60% a 79,9%</span><span class="pill warn">Seguimiento</span></div><div class="item-row"><span>Menos de 60%</span><span class="pill low">Priorizar mejoras</span></div><p class="note">Criterios internos orientativos; no equivalen al instrumento CEAL-SM/SUSESO.</p></div></div>
-       <div class="card" style="margin-bottom:17px"><h3>Detalle por pregunta</h3><div class="table-wrap"><table class="table"><thead><tr><th>Dimensión</th><th>Pregunta</th><th>N</th><th>Media</th><th>Favorables</th><th>Desfavorables</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Aún no hay resultados publicables.</td></tr>'}</tbody></table></div></div>
-       <div class="cols"><div class="card"><h3>Participación por área</h3>${br(data.areas)}</div><div class="card"><h3>Participación por cargo</h3>${br(data.cargos)}</div></div>
-       <div class="card"><h3>Participación por turno</h3>${br(data.turnos,'turnos')}</div>`}
-       <p class="note">Los filtros se aplican solo a estadísticas agrupadas. Evita cruzar resultados de grupos pequeños o utilizar diferencias entre filtros para identificar respuestas.</p>`;
+      <div class="metrics">${metric('Encuestas recibidas',data.responses_total,'Total global de encuestas completas')}${metric('Encuestas de la selección',data.suppressed?'Protegido':data.selected_n,filtered?'Con filtros actuales':'Sin filtros')}${metric('Favorabilidad',data.suppressed?'Protegido':pctText(data.favorable_pct),'Respuestas 4 y 5 / respuestas válidas')}${metric('Desacuerdo',data.suppressed?'Protegido':pctText(data.unfavorable_pct),'Respuestas 1 y 2 / respuestas válidas')}${metric('Foco principal',data.suppressed?'Protegido':weak?.dimension||'—','Pregunta con menor favorabilidad publicable')}</div>
+      ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Resultados protegidos</strong><p>Hay menos de cinco encuestas en la selección actual. Puedes ver el total global, pero aún no porcentajes por pregunta, área, cargo o turno.</p><p class="note">Completa más encuestas o utiliza una selección más amplia. No es necesario generar más códigos para calcular estos indicadores.</p></div></div>`:
+      `<div class="cols"><section class="card"><h3>Preguntas que requieren atención</h3><p class="note">Orden de menor a mayor favorabilidad. Comparación de respuestas válidas (1 a 5), excluyendo “No sé / No aplica”.</p>${ranked.length?ranked.map(fmtBar).join(''):'<p class="muted">Las preguntas todavía no alcanzan el mínimo de cinco respuestas válidas.</p>'}</section>
+      <section class="card"><h3>Prioridad para jefaturas y SSMA</h3>${priorityCards(data)}<p class="note">Las medidas son orientativas: contrastar con observaciones en terreno antes de decidir una intervención.</p></section></div>
+      <section class="card strategic-section"><h3>Detalle de cada pregunta</h3><p class="note">Favorabilidad: 4–5; desacuerdo: 1–2; neutral: 3. “No aplica”: 0, no integra el denominador de porcentajes.</p><div class="table-wrap"><table class="table"><thead><tr><th>N.º</th><th>Pregunta / dimensión</th><th>Encuestas</th><th>Válidas</th><th>Favorables</th><th>Desacuerdo</th><th>Neutral</th><th>No aplica</th></tr></thead><tbody>${detail||'<tr><td colspan="8">Aún no hay datos suficientes.</td></tr>'}</tbody></table></div></section>
+      <div class="strategic-panels">${axisPanel(data.areas,'Comparación estratégica por área',q,'areas')}${axisPanel(data.cargos,'Comparación estratégica por cargo',q,'cargos')}${axisPanel(data.turnos,'Comparación por turno A / B',q,'turnos')}</div>`}
+      <p class="note privacy-note">Privacidad: se muestran solo agregados de grupos con un mínimo de 5 encuestas y, para cada pregunta, 5 respuestas válidas. Se oculta un eje completo si algún segmento tiene menos de 5 encuestas. Evita comparar filtros para inferir respuestas individuales. Estos criterios son internos, no resultados CEAL-SM/SUSESO.</p>`;
     ['area','cargo','turno'].forEach(id=>$('#filter-'+id).addEventListener('change',e=>{store.filters[id]=e.target.value;adminDashboard().catch(err=>$('#admin-content').innerHTML=banner(fail(err)));}));
     $('#reload').addEventListener('click',()=>adminDashboard());$('#print').addEventListener('click',()=>print());
-    $('#export').disabled=!!data.suppressed;$('#export').addEventListener('click',()=>exportCSV(q));
+    $('#export').disabled=!!data.suppressed;$('#export').addEventListener('click',()=>exportInsightsCSV(data));
   }
-  function exportCSV(items){const cells=[['Dimensión','Pregunta','Participantes','Promedio','Favorables %','Desfavorables %']];for(const q of items)cells.push([q.dimension,q.text,q.n,q.average??'',q.favorable_pct??'',q.unfavorable_pct??'']);
+  function exportInsightsCSV(data){
+    const cols=[['Tipo','Área/Cargo/Turno','Dimensión','Pregunta','Encuestas','Respuestas válidas','Favorables %','Desacuerdo %','Neutrales %']];
+    for(const q of data.questions||[])cols.push(['Pregunta','General',q.dimension,q.text,q.n,q.valid_n,q.favorable_pct,q.unfavorable_pct,q.neutral_pct]);
+    for(const [name,obj] of [['Área',data.areas],['Cargo',data.cargos],['Turno',data.turnos]]){
+      if(obj?.protected)continue;
+      for(const x of obj?.segments||[])cols.push([name,x.name,'Resumen','',x.n,x.valid_n,x.favorable_pct,x.unfavorable_pct,'']);
+      for(const x of obj?.matrix||[])cols.push([name+' - Pregunta',x.name,x.dimension,x.text,x.n,x.valid_n,x.favorable_pct,x.unfavorable_pct,'']);
+    }
     const safe=v=>{let s=String(v??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"';};
-    const text='\ufeff'+cells.map(row=>row.map(safe).join(';')).join('\r\n');const url=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='ESM_resultados_agrupados.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    const csv='\ufeff'+cols.map(row=>row.map(safe).join(';')).join('\r\n');
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download='ESM_dashboard_encuestas_agrupadas.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
+  // Gestión de respuestas: nunca muestra registros individuales ni respuestas crudas.
+  // Se permite borrar grupos >=5 o reiniciar por completo la campaña de prueba.
+  async function adminResponses(message=''){
+    const f=store.responseFilters;
+    const args={p_area:f.area||null,p_cargo:f.cargo||null,p_turno:f.turno||null,
+      p_day_from:f.from||null,p_day_to:f.to||null};
+    const [opts,preview,historyRows]=await Promise.all([
+      rpc('survey_admin_options'),
+      rpc('survey_admin_responses_preview',args),
+      rpc('survey_admin_deletion_history')
+    ]);
+    const fmtDate=d=>d?String(d).slice(0,10):'—';
+    const isAll=!!preview.all_selected;
+    const countLabel=preview.protected?'Menos de 5 (protegido)':number(preview.selected_count);
+    const countDesc=preview.protected?'El recuento exacto se oculta para proteger a los trabajadores.':
+      (isAll?'Sin filtros activos':'Área, cargo, turno y fechas seleccionados');
+    const items=(historyRows||[]).map(h=>{
+      const fields=h.filters||{};
+      const scope=h.full_reset?'Campaña completa':[
+        fields.area&&'Área: '+fields.area,
+        fields.cargo&&'Cargo: '+fields.cargo,
+        fields.turno&&'Turno: '+fields.turno,
+        fields.desde&&'Desde: '+fields.desde,
+        fields.hasta&&'Hasta: '+fields.hasta
+      ].filter(Boolean).join(' · ');
+      return `<tr><td>${esc(fmtDate(h.day))}</td><td>${esc(h.deleted)}</td><td>${esc(scope||'Selección')}</td><td>${esc(h.reason)}</td></tr>`;
+    }).join('');
+    $('#admin-content').innerHTML=`
+      <div class="toolbar"><div><div class="section-label">ADMINISTRACIÓN PRIVADA · ESM</div>
+      <h2>Gestión de respuestas</h2><p class="muted">Consulta por área, cargo, turno o fechas y elimina registros de prueba cuando corresponda.</p></div></div>
+      ${message?banner(message,false):''}
+      <section class="card strategic-section">
+        <h3>Filtrar las encuestas recibidas</h3>
+        <form id="manage-filters" class="form"><div class="management-filter-grid">
+          <label class="form-label">Área<select name="area">${selectOptions(opts.areas||[],f.area,'Todas las áreas')}</select></label>
+          <label class="form-label">Cargo<select name="cargo">${selectOptions(opts.cargos||[],f.cargo,'Todos los cargos')}</select></label>
+          <label class="form-label">Turno<select name="turno">${selectOptions(['A','B'],f.turno,'Ambos turnos')}</select></label>
+          <label class="form-label">Desde<input type="date" name="from" value="${esc(f.from)}"></label>
+          <label class="form-label">Hasta<input type="date" name="to" value="${esc(f.to)}"></label>
+        </div><div class="actions"><button type="submit" class="button primary">Aplicar filtros</button>
+          <button type="button" id="manage-clear" class="button">Limpiar filtros</button></div></form>
+        <div class="management-summary">
+          ${metric('Encuestas recibidas',preview.global_total,'Total histórico, sin depender de la cantidad de códigos')}
+          ${metric('Encuestas seleccionadas',countLabel,countDesc)}
+        </div>
+        ${notice('Para proteger la confidencialidad, este panel no permite ver ni descargar respuestas individuales. Los filtros con menos de cinco encuestas no muestran su recuento ni pueden eliminarse selectivamente.')}
+      </section>
+      <div class="cols">
+        <section class="card">
+          <h3>Eliminar las encuestas filtradas</h3>
+          <p class="muted">Elimina todas las encuestas que coinciden con los filtros actuales, solo si el grupo contiene al menos cinco registros. También se eliminan sus respuestas a las preguntas.</p>
+          <button class="button danger" type="button" id="manage-delete-filter" ${preview.eligible_filtered_delete?'':'disabled'}>Eliminar selección filtrada</button>
+          <p class="note">${isAll?'Selecciona al menos un filtro para usar esta opción.':preview.protected?'Selección protegida (menos de cinco).':preview.eligible_filtered_delete?'Hay una selección publicable para revisar.':'No hay selección eliminable.'}</p>
+        </section>
+        <section class="card">
+          <h3>Reiniciar todas las encuestas</h3>
+          <p class="muted">Úsalo únicamente para limpiar pruebas o iniciar una campaña desde cero. Elimina todas las encuestas y sus respuestas, aunque exista solo una.</p>
+          <button class="button danger" type="button" id="manage-delete-all" ${preview.can_reset_all?'':'disabled'}>Eliminar todas las encuestas</button>
+          <p class="note">Los códigos utilizados seguirán utilizados. Este procedimiento no crea ni reactiva credenciales.</p>
+        </section>
+      </div>
+      <section class="card strategic-section management-confirm" id="delete-confirm-panel" hidden>
+        <div class="section-label">ACCIÓN IRREVERSIBLE</div><h3 id="delete-confirm-title">Confirmar eliminación</h3>
+        <p class="muted" id="delete-confirm-description"></p>
+        <form id="delete-confirm-form" class="form">
+          <label class="form-label">Motivo (obligatorio, mínimo 12 caracteres)
+            <textarea id="delete-reason" minlength="12" maxlength="300" required placeholder="Ejemplo: eliminación de encuestas utilizadas para probar la plataforma"></textarea></label>
+          <label class="form-label">Escribe exactamente <strong id="delete-confirm-phrase"></strong> para continuar
+            <input id="delete-confirm-input" autocomplete="off" required spellcheck="false"></label>
+          <div class="actions"><button class="button danger" id="delete-confirm-button" type="submit">Confirmar eliminación definitiva</button>
+            <button class="button" type="button" id="delete-cancel">Cancelar</button></div>
+          <div id="delete-feedback"></div>
+        </form>
+      </section>
+      <section class="card strategic-section"><h3>Historial de eliminaciones</h3>
+        <p class="note">Registro administrativo de cuándo, cuántas encuestas y por qué se eliminaron. No conserva respuestas individuales.</p>
+        <div class="table-wrap"><table class="table"><thead><tr><th>Fecha</th><th>Eliminadas</th><th>Alcance</th><th>Motivo</th></tr></thead>
+        <tbody>${items||'<tr><td colspan="4">Todavía no hay eliminaciones registradas.</td></tr>'}</tbody></table></div>
+      </section>`;
+
+    $('#manage-filters').addEventListener('submit',e=>{
+      e.preventDefault();const v=new FormData(e.currentTarget);
+      const from=String(v.get('from')||''),to=String(v.get('to')||'');
+      if(from&&to&&from>to){alert('La fecha Desde no puede ser posterior a Hasta.');return;}
+      store.responseFilters={area:String(v.get('area')||''),cargo:String(v.get('cargo')||''),turno:String(v.get('turno')||''),from,to};
+      adminResponses().catch(e=>$('#admin-content').innerHTML=banner(fail(e)));
+    });
+    $('#manage-clear').addEventListener('click',()=>{
+      store.responseFilters={area:'',cargo:'',turno:'',from:'',to:''};
+      adminResponses().catch(e=>$('#admin-content').innerHTML=banner(fail(e)));
+    });
+    let deleteAll=false;
+    const panel=$('#delete-confirm-panel');
+    const openConfirm=all=>{
+      deleteAll=all;
+      $('#delete-confirm-form').reset();$('#delete-feedback').innerHTML='';
+      const phrase=all?'ELIMINAR TODAS':'ELIMINAR FILTRO';
+      $('#delete-confirm-phrase').textContent=phrase;
+      $('#delete-confirm-title').textContent=all?'Reiniciar toda la campaña':'Eliminar encuestas filtradas';
+      $('#delete-confirm-description').textContent=all?
+        `Se eliminarán las ${preview.global_total} encuestas registradas en toda la campaña, sin importar los filtros. Esta acción no se puede revertir.`:
+        `Se eliminarán las ${preview.selected_count} encuestas que coinciden con los filtros aplicados. Esta acción no se puede revertir.`;
+      panel.hidden=false;panel.scrollIntoView({behavior:'smooth',block:'start'});
+    };
+    $('#manage-delete-filter').addEventListener('click',()=>openConfirm(false));
+    $('#manage-delete-all').addEventListener('click',()=>openConfirm(true));
+    $('#delete-cancel').addEventListener('click',()=>{panel.hidden=true;});
+    $('#delete-confirm-form').addEventListener('submit',async e=>{
+      e.preventDefault();const required=deleteAll?'ELIMINAR TODAS':'ELIMINAR FILTRO';
+      const typed=$('#delete-confirm-input').value.trim();
+      if(typed!==required){$('#delete-feedback').innerHTML=banner('La frase de confirmación no coincide.');return;}
+      const reason=$('#delete-reason').value.trim();
+      if(reason.length<12){$('#delete-feedback').innerHTML=banner('Especifica un motivo de al menos 12 caracteres.');return;}
+      const expected=deleteAll?Number(preview.global_total):Number(preview.selected_count);
+      if(!confirm(`Confirmación final: ¿eliminar definitivamente ${expected} encuestas?`))return;
+      const btn=$('#delete-confirm-button');btn.disabled=true;
+      $('#delete-feedback').innerHTML='';
+      try{
+        const result=await rpc('survey_admin_delete_responses',{
+          p_area:deleteAll?null:args.p_area,
+          p_cargo:deleteAll?null:args.p_cargo,
+          p_turno:deleteAll?null:args.p_turno,
+          p_day_from:deleteAll?null:args.p_day_from,
+          p_day_to:deleteAll?null:args.p_day_to,
+          p_reason:reason,p_confirmation:required,p_expected_count:expected,p_all:deleteAll
+        });
+        store.dashboard=null;
+        if(deleteAll)store.responseFilters={area:'',cargo:'',turno:'',from:'',to:''};
+        await adminResponses(`Eliminación registrada: ${result.deleted} encuestas. Los códigos ya utilizados permanecen bloqueados.`);
+      }catch(err){$('#delete-feedback').innerHTML=banner(fail(err));btn.disabled=false;}
+    });
+  }
+
   async function adminQuestions(message=''){
     const list=await rpc('survey_admin_questions');store.adminQuestions=list;
     $('#admin-content').innerHTML=`<div class="section-label">GESTIÓN DE CUESTIONARIO</div><h2>Administrar preguntas</h2><p class="muted">Agrega, edita o archiva preguntas. Al editar una pregunta que ya tiene respuestas, se conserva una versión histórica.</p>
