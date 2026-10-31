@@ -14,6 +14,13 @@
     {value:5,label:'Totalmente de acuerdo'}, {value:0,label:'No sé / No aplica'}
   ];
   const store={status:'none',questions:[],areas:[],cargos:[],answers:{},admin:false,tab:'dashboard',filters:{area:'',cargo:'',turno:''},adminQuestions:[],adminOptions:null,dashboard:null,newCodes:[]};
+  // El comprobante temporal se mantiene solamente durante esta pestaña.
+  // No contiene el código original y NO identifica las respuestas guardadas.
+  const TICKET_KEY='esm_encuesta_acceso_v3';
+  let temporaryTicket='';
+  const getTicket=()=>{try{return sessionStorage.getItem(TICKET_KEY)||temporaryTicket;}catch(_){return temporaryTicket}};
+  const saveTicket=t=>{temporaryTicket=t;try{sessionStorage.setItem(TICKET_KEY,t)}catch(_){/* Se conserva al menos mientras la pestaña no recargue */}};
+  const clearTicket=()=>{temporaryTicket='';try{sessionStorage.removeItem(TICKET_KEY)}catch(_){}};
   const $=(s)=>document.querySelector(s);
   const esc=(x)=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const number=(x)=>x==null?'—':String(x);
@@ -35,30 +42,35 @@
   }
   async function workerPage(){
     let state='none';
-    const {data:{session}}=await sp.auth.getSession();
-    if(session?.user?.is_anonymous){state=await rpc('survey_access_state');}
+    const ticket=getTicket();
+    if(ticket){state=await rpc('survey_code_state',{p_ticket:ticket});if(state==='none')clearTicket();}
     store.status=state;
     if(state==='ready')await loadQuestionnaire();
     renderWorker();
   }
-  async function loadQuestionnaire(){const [questions,options]=await Promise.all([rpc('survey_public_questions'),rpc('survey_public_options')]);store.questions=questions||[];store.areas=options?.areas||[];store.cargos=options?.cargos||[];}
+  async function loadQuestionnaire(){
+    const ticket=getTicket();
+    const [questions,options]=await Promise.all([
+      rpc('survey_code_questions',{p_ticket:ticket}),
+      rpc('survey_code_options',{p_ticket:ticket})
+    ]);
+    store.questions=questions||[];store.areas=options?.areas||[];store.cargos=options?.cargos||[];
+  }
   function renderWorker(error='',success=''){
     const intro=pageIntro();
     if(store.status==='submitted'){
       root.innerHTML=intro+`<div class="card complete"><div class="check">✓</div><h2>¡Gracias por participar!</h2><p>Tu encuesta fue recibida. No se guarda junto a tu código de acceso.</p>${notice('Los resultados se entregan de manera agrupada, no por persona.')}<a class="button" href="#encuesta">Encuesta finalizada</a></div>`;return;
     }
     if(store.status!=='ready'){
-      root.innerHTML=intro+`<div class="card entry-card"><div class="section-label">ACCESO CONFIDENCIAL</div><h2>Ingresa a la encuesta</h2><p class="muted">Necesitas un código único y la contraseña general de esta campaña. No solicitamos nombre, RUT ni correo electrónico.</p>
-      <form id="access-form" class="form"><label class="form-label">Código de acceso<input id="code" required maxlength="40" autocomplete="off" placeholder="ESM-XXXX-XXXX-XXXX"></label>
-      <label class="form-label">Contraseña de ingreso<input id="password" type="password" required maxlength="128" autocomplete="off" placeholder="Contraseña entregada para esta encuesta"></label><button class="button primary" type="submit" id="enter">Ingresar a la encuesta →</button></form><div id="form-feedback">${error?banner(error):success?banner(success,false):''}</div>
+      root.innerHTML=intro+`<div class="card entry-card"><div class="section-label">ACCESO CONFIDENCIAL</div><h2>Ingresa a la encuesta</h2><p class="muted">Ingresa únicamente con tu código individual autorizado. No solicitamos contraseña, nombre, RUT ni correo electrónico.</p>
+      <form id="access-form" class="form"><label class="form-label">Código único de acceso<input id="code" required maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ESM-XXXX-XXXX-XXXX"></label>
+      <button class="button primary" type="submit" id="enter">Ingresar a la encuesta →</button></form><div id="form-feedback">${error?banner(error):success?banner(success,false):''}</div>
       ${notice('Esta encuesta busca mejorar la seguridad. Responde con sinceridad, criterio y responsabilidad. Tu identidad no se solicita y los resultados se analizan de forma agrupada.')}</div>`;
       $('#access-form').addEventListener('submit',async e=>{e.preventDefault();const submit=$('#enter');submit.disabled=true;$('#form-feedback').innerHTML='';try{
-        const {data:{session}}=await sp.auth.getSession();
-        if(!session?.user?.is_anonymous){if(session)await sp.auth.signOut();const r=await sp.auth.signInAnonymously();if(r.error)throw r.error;}
-        const status=await rpc('survey_claim_access',{p_code:$('#code').value.trim().toUpperCase(),p_password:$('#password').value});
-        if(status==='blocked')throw Error('Se bloqueó temporalmente el acceso por intentos fallidos. Intenta nuevamente en 30 minutos.');
-        if(status==='invalid')throw Error('Código o contraseña incorrectos, o código ya utilizado.');
-        store.status=status;store.answers={};if(status==='ready')await loadQuestionnaire();renderWorker();
+        const result=await rpc('survey_code_claim',{p_code:$('#code').value.trim().toUpperCase()});
+        if(result?.status!=='ready'||!result?.ticket)throw Error('Código no autorizado o ya utilizado. Verifica que corresponda al listado oficial de ESM.');
+        saveTicket(result.ticket);
+        store.status='ready';store.answers={};await loadQuestionnaire();renderWorker();
       }catch(e){$('#form-feedback').innerHTML=banner(fail(e));submit.disabled=false;}});return;
     }
     const questions=store.questions.map((q,i)=>`<div class="question"><div class="tag">PREGUNTA ${i+1} DE ${store.questions.length} · ${esc(q.dimension)}</div><h3>${esc(q.text)}</h3><div class="rating" role="group" aria-label="${esc(q.text)}">${ratings.map(r=>`<label class="choice"><input type="radio" name="q-${esc(q.id)}" value="${r.value}" ${store.answers[q.id]===r.value?'checked':''} required><span>${esc(r.label)}</span></label>`).join('')}</div></div>`).join('');
@@ -73,7 +85,7 @@
     $('#survey-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.target;const values=new FormData(f);const answers={};store.questions.forEach(q=>{if(values.has('q-'+q.id))answers[q.id]=Number(values.get('q-'+q.id));});
       if(Object.keys(answers).length!==store.questions.length){$('#form-feedback').innerHTML=banner('Falta responder una o más preguntas.');return;}
       const button=$('#submit-survey');button.disabled=true;
-      try {await rpc('survey_submit',{p_area:values.get('area'),p_cargo:values.get('cargo'),p_turno:values.get('turno'),p_answers:answers});store.status='submitted';store.answers={};renderWorker();}
+      try {await rpc('survey_code_submit',{p_ticket:getTicket(),p_area:values.get('area'),p_cargo:values.get('cargo'),p_turno:values.get('turno'),p_answers:answers});store.status='submitted';store.answers={};renderWorker();}
       catch(err){$('#form-feedback').innerHTML=banner('No fue posible guardar las respuestas: '+fail(err));button.disabled=false;}
     });
   }
@@ -145,10 +157,10 @@
     const data=await rpc('survey_admin_dashboard',{p_area:null,p_cargo:null,p_turno:null});
     const available=Math.max(0,Number(data.codes_total||0)-Number(data.codes_redeemed||0));
     $('#admin-content').innerHTML=`<div class="section-label">ADMINISTRACIÓN DE ACCESOS</div><h2>Crear nuevos códigos</h2>
-    <p class="muted">Cada código es individual y se puede activar una sola vez. El trabajador también necesita la contraseña general. No publiques este listado en GitHub.</p>
+    <p class="muted">Cada código es individual y se puede activar una sola vez. No se solicita una contraseña general. No publiques este listado en GitHub.</p>
     <div class="metrics">${metric('Total registrados',data.codes_total,'Inicialmente 300 + nuevos lotes')}${metric('Ya utilizados',data.codes_redeemed,'Código activado por trabajador')}${metric('Sin utilizar',available,'Disponibles para distribución')}</div>
     <div class="cols"><div class="card"><h3>Generar códigos nuevos</h3><form id="create-codes" class="form"><label class="form-label">Cantidad nueva (1 a 100)<input type="number" id="code-quantity" min="1" max="100" step="1" value="10" required></label><button class="button primary" id="new-code-btn" type="submit">Generar códigos seguros</button></form><div id="codes-feedback"></div><p class="note">Para 300 códigos adicionales, genera tres lotes de 100. La base evita duplicados y los nuevos códigos quedan activos inmediatamente.</p></div>
-    <div class="card"><h3>Entrega y custodia</h3><p>1. Genera el lote y descarga su CSV.</p><p>2. Conserva el archivo solo en un lugar restringido.</p><p>3. Entrega códigos distintos, sin asociarlos a nombres ni RUT.</p><p>4. No guardes los códigos en el repositorio ni incluyas la contraseña en la misma lista.</p><p class="note">Por diseño, un código perdido no puede recuperarse del sistema; deberá emitirse otro. Los códigos recién generados tienen formato ESM-XXXX-XXXX-XXXX-XXXX.</p></div></div>
+    <div class="card"><h3>Entrega y custodia</h3><p>1. Genera el lote y descarga su CSV.</p><p>2. Conserva el archivo solo en un lugar restringido.</p><p>3. Entrega códigos distintos, sin asociarlos a nombres ni RUT.</p><p>4. No guardes los códigos en el repositorio de GitHub.</p><p class="note">Por diseño, un código perdido no puede recuperarse del sistema; deberá emitirse otro. Los códigos recién generados tienen formato ESM-XXXX-XXXX-XXXX-XXXX.</p></div></div>
     <div id="new-code-results" class="card" style="display:none"><h3>Códigos del lote recién creado</h3><div class="notice"><span class="icon">ⓘ</span><span>Esta es la única visualización de los códigos nuevos. Descárgalos antes de salir de esta sección.</span></div><label class="form-label">Lista para distribución<textarea id="new-codes-text" readonly rows="10" spellcheck="false"></textarea></label><div class="actions"><button class="button primary" type="button" id="download-codes">Descargar CSV de este lote</button><button class="button" type="button" id="copy-codes">Copiar lista</button></div></div>`;
     $('#create-codes').addEventListener('submit',async e=>{e.preventDefault();
       const n=Number($('#code-quantity').value); if(!Number.isInteger(n)||n<1||n>100){$('#codes-feedback').innerHTML=banner('Indica entre 1 y 100 códigos.');return;}
@@ -174,7 +186,7 @@
     $('#copy-codes').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(store.newCodes.join('\n'));$('#copy-codes').textContent='Copiado';}catch(e){$('#new-codes-text').select();}});
   }
 
-  function adminQR(){const url=location.origin+location.pathname+'#encuesta';$('#admin-content').innerHTML=`<div class="section-label">DIFUSIÓN EN FAENA</div><h2>Enlace y código QR</h2><div class="qr-layout"><div class="card qr-frame"><h3>Escanea y participa</h3><div class="qr-code" id="qr-image"></div><p class="note">Este QR lleva a la encuesta, no al dashboard.</p></div><div class="card"><h3>Dirección web para trabajadores</h3><p class="url" id="share-url">${esc(url)}</p><div class="actions"><button class="button primary" id="copy-url">Copiar enlace</button><button class="button" id="print-qr">Imprimir QR</button></div><p class="muted">Distribuye un código diferente a cada trabajador y la clave compartida por separado. No registres qué código recibió cada persona.</p>${notice('Un trabajador completa una sola encuesta. Los resultados se muestran únicamente de forma agrupada.')}</div></div>`;
+  function adminQR(){const url=location.origin+location.pathname+'#encuesta';$('#admin-content').innerHTML=`<div class="section-label">DIFUSIÓN EN FAENA</div><h2>Enlace y código QR</h2><div class="qr-layout"><div class="card qr-frame"><h3>Escanea y participa</h3><div class="qr-code" id="qr-image"></div><p class="note">Este QR lleva a la encuesta, no al dashboard.</p></div><div class="card"><h3>Dirección web para trabajadores</h3><p class="url" id="share-url">${esc(url)}</p><div class="actions"><button class="button primary" id="copy-url">Copiar enlace</button><button class="button" id="print-qr">Imprimir QR</button></div><p class="muted">Distribuye un código diferente a cada trabajador. Evita asociar códigos con nombres o RUT.</p>${notice('Un trabajador completa una sola encuesta. Los resultados se muestran únicamente de forma agrupada.')}</div></div>`;
     if(window.QRCode){new window.QRCode($('#qr-image'),{text:url,width:230,height:230,colorDark:'#102c49',colorLight:'#ffffff',correctLevel:window.QRCode.CorrectLevel.M});}
     else $('#qr-image').textContent='No se pudo cargar el generador QR. Puedes compartir el enlace.';
     $('#copy-url').addEventListener('click',()=>navigator.clipboard?.writeText(url).then(()=>{$('#copy-url').textContent='¡Copiado!';}).catch(()=>prompt('Copia el enlace:',url)));
