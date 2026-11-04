@@ -32,7 +32,7 @@
   function waiting(){root.innerHTML='<div class="card loading"><span class="spinner"></span><p>Cargando información…</p></div>';}
   function route(){return location.hash==='#admin'?'admin':'worker'}
   function toggleNav(){adminLink.innerHTML=route()==='admin'?'← Volver a encuesta':'⚙ Administrador';adminLink.href=route()==='admin'?'#encuesta':'#admin'}
-  function pageIntro(){return `<section class="hero"><div class="eyebrow">ESM · CULTURA PREVENTIVA</div><h1>Tu voz también protege.</h1><p>Queremos saber si cuentas con la confianza y el respaldo necesarios para detener trabajos inseguros.</p></section>`;}
+  function pageIntro(){return `<section class="hero"><div class="eyebrow">ESM · CULTURA PREVENTIVA</div><h1>Tu voz también protege.</h1><p>Queremos conocer tu experiencia y percepción sobre la seguridad en el trabajo. Responde las siguientes preguntas con sinceridad.</p></section>`;}
   async function init(){
     toggleNav();
     if(!sp){root.innerHTML=`${pageIntro()}<div class="card entry-card"><h2>Falta conectar Supabase</h2><p class="muted">Abre el archivo <b>config.js</b> y reemplaza los datos de ejemplo por la URL y la llave publicable de tu proyecto Supabase. Luego publica estos archivos en GitHub Pages.</p>${notice('Nunca publiques contraseñas ni claves de servicio en GitHub.')}</div>`;return;}
@@ -87,7 +87,12 @@
         store.status='ready';store.answers={};await loadQuestionnaire();renderWorker();
       }catch(e){$('#form-feedback').innerHTML=banner(fail(e));submit.disabled=false;}});return;
     }
-    const questions=store.questions.map((q,i)=>`<div class="question"><div class="tag">PREGUNTA ${i+1} DE ${store.questions.length} · ${esc(q.dimension)}</div><h3>${esc(q.text)}</h3><div class="rating" role="group" aria-label="${esc(q.text)}">${ratings.map(r=>`<label class="choice"><input type="radio" name="q-${esc(q.id)}" value="${r.value}" ${store.answers[q.id]===r.value?'checked':''} required><span>${esc(r.label)}</span></label>`).join('')}</div></div>`).join('');
+    const questions=store.questions.map((q,i)=>{
+      const required=q.required!==false;
+      if(q.type==='text')return `<div class="question"><div class="tag">PREGUNTA ${i+1} DE ${store.questions.length} · ${esc(q.dimension)} · OPCIONAL</div><h3>${esc(q.text)}</h3><label class="form-label"><textarea name="q-${esc(q.id)}" maxlength="1500" rows="5" placeholder="Puedes escribir una sugerencia breve (opcional)">${esc(store.answers[q.id]||'')}</textarea></label></div>`;
+      const options=Array.isArray(q.choices)&&q.choices.length?q.choices.map(c=>({value:String(c.id),label:c.text})):ratings.map(r=>({value:String(r.value),label:r.label}));
+      return `<div class="question"><div class="tag">PREGUNTA ${i+1} DE ${store.questions.length} · ${esc(q.dimension)}</div><h3>${esc(q.text)}</h3><div class="rating" role="group" aria-label="${esc(q.text)}">${options.map(o=>`<label class="choice"><input type="radio" name="q-${esc(q.id)}" value="${esc(o.value)}" ${String(store.answers[q.id]??'')===o.value?'checked':''} ${required?'required':''}><span>${esc(o.label)}</span></label>`).join('')}</div></div>`;
+    }).join('');
     root.innerHTML=intro+`<section class="card"><div class="section-label">ENCUESTA DE EMPODERAMIENTO EN SEGURIDAD</div><h2>Cuéntanos tu experiencia</h2><p class="muted">Selecciona tu área de trabajo, cargo y turno. Después, responde las preguntas según lo que ocurre realmente.</p>
       ${notice('Encuesta sin nombre, RUT ni correo. El código no se guarda junto a las respuestas. Área, cargo y turno se utilizan exclusivamente para el análisis estadístico agrupado.')}
       <form id="survey-form" class="form"><div class="form-grid"><label class="form-label">Área<select name="area" required>${selectOptions(store.areas,'','Selecciona tu área')}</select></label>
@@ -95,9 +100,11 @@
       <label class="form-label">Turno<select name="turno" required><option value="">Selecciona tu turno</option><option value="A">Turno A</option><option value="B">Turno B</option></select></label></div>
       <div>${questions}</div><div id="form-feedback">${error?banner(error):''}</div><div class="survey-actions"><span class="note">Al enviar, el código queda utilizado y no permite otra encuesta.</span><button id="submit-survey" class="button primary" type="submit">Enviar respuestas →</button></div></form>
     </section>`;
-    $('#survey-form').addEventListener('change',e=>{if(e.target.type==='radio'){const id=e.target.name.slice(2);store.answers[id]=Number(e.target.value);}});
-    $('#survey-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.target;const values=new FormData(f);const answers={};store.questions.forEach(q=>{if(values.has('q-'+q.id))answers[q.id]=Number(values.get('q-'+q.id));});
-      if(Object.keys(answers).length!==store.questions.length){$('#form-feedback').innerHTML=banner('Falta responder una o más preguntas.');return;}
+    $('#survey-form').addEventListener('change',e=>{if(e.target.name?.startsWith('q-')){const id=e.target.name.slice(2);store.answers[id]=e.target.value;}});
+    $('#survey-form').addEventListener('input',e=>{if(e.target.name?.startsWith('q-')){const id=e.target.name.slice(2);store.answers[id]=e.target.value;}});
+    $('#survey-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.target;const values=new FormData(f);const answers={};store.questions.forEach(q=>{const key='q-'+q.id;if(values.has(key)){const value=String(values.get(key)??'');if(q.type!=='text'||value.trim())answers[q.id]=q.type==='text'?value.trim():value;}});
+      const missing=store.questions.some(q=>q.required!==false&&!Object.prototype.hasOwnProperty.call(answers,q.id));
+      if(missing){$('#form-feedback').innerHTML=banner('Falta responder una o más preguntas obligatorias.');return;}
       const button=$('#submit-survey');button.disabled=true;
       try {await rpc('survey_code_submit',{p_ticket:getTicket(),p_area:values.get('area'),p_cargo:values.get('cargo'),p_turno:values.get('turno'),p_answers:answers});store.status='submitted';store.answers={};renderWorker();}
       catch(err){$('#form-feedback').innerHTML=banner('No fue posible guardar las respuestas: '+fail(err));button.disabled=false;}
@@ -174,7 +181,7 @@
     return `<section class="card strategic-section"><h3>${esc(label)}</h3><p class="note">Ordenado por menor favorabilidad general. Cada celda muestra la favorabilidad de esa pregunta dentro del grupo; “—” indica dato protegido o sin base suficiente.</p>
       <div class="table-wrap"><table class="table matrix-table"><thead><tr><th>Grupo</th><th>Encuestas</th><th>General</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
   }
-  async function adminDashboard(){
+  async function adminLegacyDashboard(){
     const args={p_area:store.filters.area||null,p_cargo:store.filters.cargo||null,p_turno:store.filters.turno||null};
     const [opts,data]=await Promise.all([rpc('survey_admin_options'),rpc('survey_admin_insights',args)]);
     store.adminOptions=opts;store.dashboard=data;
@@ -210,6 +217,62 @@
     const csv='\ufeff'+cols.map(row=>row.map(safe).join(';')).join('\r\n');
     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
     const a=document.createElement('a');a.href=url;a.download='ESM_dashboard_encuestas_agrupadas.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  async function adminDashboard(){
+    const args={p_area:store.filters.area||null,p_cargo:store.filters.cargo||null,p_turno:store.filters.turno||null};
+    let data;
+    try{data=await rpc('survey_admin_operational_results',args);}
+    catch(err){
+      // Compatibilidad durante la publicación: antes de ejecutar la migración
+      // de Supabase se mantiene disponible el dashboard anterior.
+      if(/survey_admin_operational_results|schema cache|function/i.test(fail(err)))return adminLegacyDashboard();
+      throw err;
+    }
+    const opts=await rpc('survey_admin_options');
+    store.adminOptions=opts;store.dashboard=data;
+    const f=store.filters;
+    const filtered=Object.values(f).some(Boolean);
+    const questions=(data.questions||[]).slice().sort((a,b)=>Number(a.position)-Number(b.position));
+    const choiceSections=questions.filter(q=>q.type==='single_choice').map(q=>{
+      const total=Number(q.answered_n||0);
+      const rows=(q.choices||[]).map(c=>{
+        const n=Number(c.n||0);const pct=total?Math.round(n*1000/total)/10:0;
+        return `<div class="answer-row"><div><strong>${esc(c.text)}</strong><div class="note">${esc(n)} respuesta${n===1?'':'s'} · ${esc(pct)}%</div></div><span class="track"><span class="fill" style="display:block;width:${Math.max(0,Math.min(100,pct))}%"></span></span></div>`;
+      }).join('');
+      return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(total)}</div><h3>${esc(q.text)}</h3><div class="answer-list">${rows||'<p class="muted">Aún no hay respuestas.</p>'}</div></section>`;
+    }).join('');
+    const comments=(data.comments||[]).map((x,i)=>`<div class="comment-item"><strong>Comentario ${i+1}</strong><p>${esc(x)}</p></div>`).join('');
+    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">RESULTADOS OPERACIONALES · ESM</div><h2>Percepción y prácticas de seguridad</h2><p class="note">El resultado general se muestra desde la primera respuesta. Los filtros continúan protegidos para grupos menores de cinco personas.</p></div><div class="actions"><button class="button" id="export">↓ Exportar Excel</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
+      <div class="filters"><label class="form-label">Área<select id="filter-area">${selectOptions(opts.areas,f.area,'Todas las áreas')}</select></label><label class="form-label">Cargo<select id="filter-cargo">${selectOptions(opts.cargos,f.cargo,'Todos los cargos')}</select></label><label class="form-label">Turno<select id="filter-turno">${selectOptions(['A','B'],f.turno,'Ambos turnos')}</select></label></div>
+      <div class="metrics">${metric('Encuestas recibidas',data.responses_total,'Total histórico conservado')}${metric('Encuestas analizadas',data.suppressed?'Protegido':data.selected_n,filtered?'Selección filtrada':'Resultado general')}${metric('Preguntas cerradas',questions.filter(q=>q.type==='single_choice').length,'Cinco alternativas por pregunta')}${metric('Comentarios abiertos',data.suppressed?'Protegido':(data.comments||[]).length,'Pregunta final opcional')}</div>
+      ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Resultados protegidos</strong><p>La selección contiene menos de cinco encuestas. Amplía el filtro o reúne más respuestas para evitar la identificación indirecta.</p></div></div>`:`<div class="operational-grid">${choiceSections}</div><section class="card"><h3>Sugerencias abiertas</h3><p class="note">Los comentarios no incluyen nombre, RUT, código ni correo. Revisa si el propio texto contiene datos personales antes de compartirlo.</p>${comments||'<p class="muted">Aún no hay comentarios abiertos.</p>'}</section>`}
+      <p class="note privacy-note">Uso ético: interpreta tendencias y brechas colectivas. Las alternativas no se presentan como respuestas “buenas” o “malas” y no deben utilizarse para sancionar trabajadores.</p>`;
+    ['area','cargo','turno'].forEach(id=>$('#filter-'+id).addEventListener('change',e=>{store.filters[id]=e.target.value;adminDashboard().catch(err=>$('#admin-content').innerHTML=banner(fail(err)));}));
+    $('#reload').addEventListener('click',()=>adminDashboard());$('#print').addEventListener('click',()=>print());
+    $('#export').disabled=!!data.suppressed;$('#export').addEventListener('click',()=>exportOperationalExcel(data));
+  }
+  async function exportOperationalExcel(data){
+    const rows=[];
+    for(const q of data.questions||[]){
+      if(q.type!=='single_choice')continue;
+      const total=Number(q.answered_n||0);
+      for(const c of q.choices||[])rows.push({Pregunta:q.position,Dimensión:q.dimension,Texto:q.text,Alternativa:c.text,Respuestas:Number(c.n||0),'Porcentaje':total?Math.round(Number(c.n||0)*1000/total)/10:0,'Total pregunta':total});
+    }
+    const comments=(data.comments||[]).map((x,i)=>({N:i+1,Comentario:x}));
+    if(!window.XLSX){
+      try{await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s);});}catch(_){/* Si el CDN falla, se entrega CSV compatible con Excel. */}
+    }
+    if(window.XLSX){
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Resultados');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(comments),'Comentarios');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Encuestas totales',data.responses_total],['Encuestas analizadas',data.selected_n],['Generado',new Date().toLocaleString('es-CL')]]),'Resumen');
+      XLSX.writeFile(wb,'ESM_resultados_encuesta_operacional.xlsx');
+      return;
+    }
+    const safe=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const csv='\ufeff'+[['Pregunta','Dimensión','Texto','Alternativa','Respuestas','Porcentaje','Total pregunta'],...rows.map(r=>[r.Pregunta,r.Dimensión,r.Texto,r.Alternativa,r.Respuestas,r.Porcentaje,r['Total pregunta']])].map(r=>r.map(safe).join(';')).join('\r\n');
+    const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='ESM_resultados_encuesta_operacional.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   // Gestión de respuestas: nunca muestra registros individuales ni respuestas crudas.
   // Se permite borrar grupos >=5 o reiniciar por completo la campaña de prueba.
@@ -346,6 +409,11 @@
 
   async function adminQuestions(message=''){
     const list=await rpc('survey_admin_questions');store.adminQuestions=list;
+    const operational=(list||[]).filter(q=>String(q.key||'').startsWith('OP')).sort((a,b)=>Number(a.position)-Number(b.position));
+    if(operational.length){
+      $('#admin-content').innerHTML=`<div class="section-label">CUESTIONARIO OPERACIONAL</div><h2>Preguntas y alternativas vigentes</h2><p class="muted">Estas preguntas forman un instrumento estructurado. Para proteger la comparabilidad histórica, las alternativas no se modifican directamente desde el navegador.</p>${operational.map(q=>`<section class="card" style="margin-bottom:14px"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · ${q.required?'OBLIGATORIA':'OPCIONAL'}</div><h3>${esc(q.text)}</h3>${q.type==='text'?'<p class="note">Respuesta abierta opcional, máximo 1.500 caracteres.</p>':`<ol>${(q.choices||[]).filter(c=>c.active!==false).map(c=>`<li>${esc(c.text)}</li>`).join('')}</ol>`}</section>`).join('')}<p class="note">Si en el futuro necesitas cambiar una pregunta, debe crearse una nueva versión para no alterar el significado de las respuestas anteriores.</p>`;
+      return;
+    }
     $('#admin-content').innerHTML=`<div class="section-label">GESTIÓN DE CUESTIONARIO</div><h2>Administrar preguntas</h2><p class="muted">Agrega, edita o archiva preguntas. Al editar una pregunta que ya tiene respuestas, se conserva una versión histórica.</p>
       ${message?banner(message,false):''}<div class="cols"><div class="card"><h3 id="form-title">Nueva pregunta</h3><form id="question-editor" class="form"><input type="hidden" id="q-id"><label class="form-label">Dimensión<input required minlength="3" maxlength="100" id="q-dimension" placeholder="Ej.: Confianza"></label><label class="form-label">Pregunta para trabajadores<textarea id="q-text" minlength="12" maxlength="350" required placeholder="Escribe una pregunta clara y específica"></textarea></label><div class="actions"><button class="button primary" type="submit" id="save-question">Guardar pregunta</button><button type="button" class="button" id="cancel-edit">Limpiar</button></div></form><div id="editor-feedback"></div></div>
       <div class="card"><h3>Preguntas activas e históricas</h3>${list.map(q=>`<div class="question-admin"><div><div class="q-meta">${esc(q.dimension)} · ${q.active?'ACTIVA':'ARCHIVADA'}</div><p>${esc(q.text)}</p></div><div class="actions"><button class="button small" data-edit="${esc(q.id)}">Editar</button><button class="button small ${q.active?'danger':''}" data-toggle="${esc(q.id)}">${q.active?'Archivar':'Reactivar'}</button></div></div>`).join('')}</div></div>`;

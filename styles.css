@@ -79,3 +79,16 @@
 .management-confirm .form-label strong{color:#a53c3c}
 @media(max-width:760px){.management-filter-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:580px){.management-filter-grid,.management-summary{grid-template-columns:1fr}}
+
+/* Encuesta operacional: alternativas propias y resultados desde N=1 */
+.operational-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px;margin-bottom:17px}
+.operational-question{min-width:0}
+.operational-question .q-meta{font-size:11px;color:#177b94;font-weight:800;letter-spacing:.45px;margin-bottom:7px}
+.answer-list{display:grid;gap:12px;margin-top:17px}
+.answer-row{display:grid;grid-template-columns:minmax(190px,1.35fr) minmax(100px,1fr);gap:14px;align-items:center;padding-bottom:11px;border-bottom:1px solid #e5edf3}
+.answer-row:last-child{border-bottom:0;padding-bottom:0}
+.answer-row strong{font-size:13px;line-height:1.35;display:block}
+.comment-item{padding:13px 0;border-bottom:1px solid #e5edf3}
+.comment-item:last-child{border-bottom:0}.comment-item p{white-space:pre-wrap;margin:4px 0}
+@media(max-width:820px){.operational-grid{grid-template-columns:1fr}}
+@media(max-width:580px){.answer-row{grid-template-columns:1fr;gap:7px}.rating .choice{padding:13px 11px}}
