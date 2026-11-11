@@ -137,6 +137,20 @@
   const pctText=v=>v==null?'—':number(v)+'%';
   const mkPill=v=>`<span class="pill ${scoreClass(v)}">${esc(pctText(v))}</span>`;
   const countValid=x=>Number(x?.valid_n||0);
+  function operationalReading(q,total){
+    const choices=(q.choices||[]).map(c=>({...c,n:Number(c.n||0),score:c.score==null?null:Number(c.score)}));
+    const answered=Number(total||0);
+    if(!answered)return 'Aún no existen respuestas para interpretar esta dimensión.';
+    const ranked=choices.slice().sort((a,b)=>b.n-a.n||Number(a.position)-Number(b.position));
+    const top=ranked[0];
+    const topPct=Math.round((top.n/answered)*1000)/10;
+    const alertN=choices.filter(c=>c.score!=null&&c.score<=2).reduce((sum,c)=>sum+c.n,0);
+    const base=answered<5?'Resultado inicial: úsalo como señal exploratoria y evita conclusiones sobre el grupo. ':'';
+    const signal=alertN>0
+      ?`${alertN} respuesta${alertN===1?'':'s'} se ubica${alertN===1?'':'n'} en alternativas que requieren revisión preventiva. `
+      :'No aparecen alternativas críticas en las respuestas disponibles. ';
+    return `${base}${signal}La opción más frecuente es “${top.text}” (${topPct}%).`;
+  }
   const advice=dim=>{
     const s=String(dim||'').toLowerCase();
     if(s.includes('autoridad'))return 'Reforzar la facultad de detener una tarea insegura.';
@@ -239,13 +253,13 @@
         const n=Number(c.n||0);const pct=total?Math.round(n*1000/total)/10:0;
         return `<div class="answer-row"><div><strong>${esc(c.text)}</strong><div class="note">${esc(n)} respuesta${n===1?'':'s'} · ${esc(pct)}%</div></div><span class="track"><span class="fill" style="display:block;width:${Math.max(0,Math.min(100,pct))}%"></span></span></div>`;
       }).join('');
-      return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(total)}</div><h3>${esc(q.text)}</h3><div class="answer-list">${rows||'<p class="muted">Aún no hay respuestas.</p>'}</div></section>`;
+      return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(total)}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'Explorar esta dimensión de la experiencia de seguridad.')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'Una oportunidad para conversar con el equipo y revisar prácticas de trabajo.')}</p></div></div><div class="answer-list">${rows||'<p class="muted">Aún no hay respuestas.</p>'}</div><div class="current-reading"><strong>Lectura orientativa</strong><p>${esc(operationalReading(q,total))}</p></div></section>`;
     }).join('');
     const comments=(data.comments||[]).map((x,i)=>`<div class="comment-item"><strong>Comentario ${i+1}</strong><p>${esc(x)}</p></div>`).join('');
     $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">RESULTADOS OPERACIONALES · ESM</div><h2>Percepción y prácticas de seguridad</h2><p class="note">El resultado general se muestra desde la primera respuesta. Los filtros continúan protegidos para grupos menores de cinco personas.</p></div><div class="actions"><button class="button" id="export">↓ Exportar Excel</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
       <div class="filters"><label class="form-label">Área<select id="filter-area">${selectOptions(opts.areas,f.area,'Todas las áreas')}</select></label><label class="form-label">Cargo<select id="filter-cargo">${selectOptions(opts.cargos,f.cargo,'Todos los cargos')}</select></label><label class="form-label">Turno<select id="filter-turno">${selectOptions(['A','B'],f.turno,'Ambos turnos')}</select></label></div>
-      <div class="metrics">${metric('Encuestas recibidas',data.responses_total,'Total histórico conservado')}${metric('Encuestas analizadas',data.suppressed?'Protegido':data.selected_n,filtered?'Selección filtrada':'Resultado general')}${metric('Preguntas cerradas',questions.filter(q=>q.type==='single_choice').length,'Cinco alternativas por pregunta')}${metric('Comentarios abiertos',data.suppressed?'Protegido':(data.comments||[]).length,'Pregunta final opcional')}</div>
-      ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Resultados protegidos</strong><p>La selección contiene menos de cinco encuestas. Amplía el filtro o reúne más respuestas para evitar la identificación indirecta.</p></div></div>`:`<div class="operational-grid">${choiceSections}</div><section class="card"><h3>Sugerencias abiertas</h3><p class="note">Los comentarios no incluyen nombre, RUT, código ni correo. Revisa si el propio texto contiene datos personales antes de compartirlo.</p>${comments||'<p class="muted">Aún no hay comentarios abiertos.</p>'}</section>`}
+      <div class="metrics">${metric('Encuestas recibidas',data.responses_total,'Respuestas de la nueva versión')}${metric('Encuestas analizadas',data.suppressed?'Protegido':data.selected_n,filtered?'Selección filtrada':'Resultado general')}${metric('Dimensiones evaluadas',questions.filter(q=>q.type==='single_choice').length,'Una pregunta por dimensión')}${metric('Base anterior','Eliminada','Inicio limpio del instrumento')}</div>
+      ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Resultados protegidos</strong><p>La selección contiene menos de cinco encuestas. Amplía el filtro o reúne más respuestas para evitar la identificación indirecta.</p></div></div>`:`<div class="operational-grid">${choiceSections}</div>${comments?`<section class="card"><h3>Sugerencias abiertas históricas</h3><p class="note">Los comentarios no incluyen nombre, RUT, código ni correo. Revisa si el propio texto contiene datos personales antes de compartirlo.</p>${comments}</section>`:''}`}
       <p class="note privacy-note">Uso ético: interpreta tendencias y brechas colectivas. Las alternativas no se presentan como respuestas “buenas” o “malas” y no deben utilizarse para sancionar trabajadores.</p>`;
     ['area','cargo','turno'].forEach(id=>$('#filter-'+id).addEventListener('change',e=>{store.filters[id]=e.target.value;adminDashboard().catch(err=>$('#admin-content').innerHTML=banner(fail(err)));}));
     $('#reload').addEventListener('click',()=>adminDashboard());$('#print').addEventListener('click',()=>print());
@@ -256,7 +270,7 @@
     for(const q of data.questions||[]){
       if(q.type!=='single_choice')continue;
       const total=Number(q.answered_n||0);
-      for(const c of q.choices||[])rows.push({Pregunta:q.position,Dimensión:q.dimension,Texto:q.text,Alternativa:c.text,Respuestas:Number(c.n||0),'Porcentaje':total?Math.round(Number(c.n||0)*1000/total)/10:0,'Total pregunta':total});
+      for(const c of q.choices||[])rows.push({Pregunta:q.position,Dimensión:q.dimension,'Qué busca':q.purpose||'','Qué puede reflejar':q.guidance||'',Texto:q.text,Alternativa:c.text,Respuestas:Number(c.n||0),'Porcentaje':total?Math.round(Number(c.n||0)*1000/total)/10:0,'Total pregunta':total});
     }
     const comments=(data.comments||[]).map((x,i)=>({N:i+1,Comentario:x}));
     if(!window.XLSX){
@@ -266,12 +280,12 @@
       const wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Resultados');
       XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(comments),'Comentarios');
-      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Encuestas totales',data.responses_total],['Encuestas analizadas',data.selected_n],['Generado',new Date().toLocaleString('es-CL')]]),'Resumen');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Encuestas recibidas',data.responses_total],['Encuestas analizadas',data.selected_n],['Preguntas vigentes',7],['Generado',new Date().toLocaleString('es-CL')]]),'Resumen');
       XLSX.writeFile(wb,'ESM_resultados_encuesta_operacional.xlsx');
       return;
     }
     const safe=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-    const csv='\ufeff'+[['Pregunta','Dimensión','Texto','Alternativa','Respuestas','Porcentaje','Total pregunta'],...rows.map(r=>[r.Pregunta,r.Dimensión,r.Texto,r.Alternativa,r.Respuestas,r.Porcentaje,r['Total pregunta']])].map(r=>r.map(safe).join(';')).join('\r\n');
+    const csv='\ufeff'+[['Pregunta','Dimensión','Qué busca','Qué puede reflejar','Texto','Alternativa','Respuestas','Porcentaje','Total pregunta'],...rows.map(r=>[r.Pregunta,r.Dimensión,r['Qué busca'],r['Qué puede reflejar'],r.Texto,r.Alternativa,r.Respuestas,r.Porcentaje,r['Total pregunta']])].map(r=>r.map(safe).join(';')).join('\r\n');
     const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='ESM_resultados_encuesta_operacional.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   // Gestión de respuestas: nunca muestra registros individuales ni respuestas crudas.
@@ -409,9 +423,9 @@
 
   async function adminQuestions(message=''){
     const list=await rpc('survey_admin_questions');store.adminQuestions=list;
-    const operational=(list||[]).filter(q=>String(q.key||'').startsWith('OP')).sort((a,b)=>Number(a.position)-Number(b.position));
+    const operational=(list||[]).filter(q=>q.active&&String(q.key||'').startsWith('EMP2_')).sort((a,b)=>Number(a.position)-Number(b.position));
     if(operational.length){
-      $('#admin-content').innerHTML=`<div class="section-label">CUESTIONARIO OPERACIONAL</div><h2>Preguntas y alternativas vigentes</h2><p class="muted">Estas preguntas forman un instrumento estructurado. Para proteger la comparabilidad histórica, las alternativas no se modifican directamente desde el navegador.</p>${operational.map(q=>`<section class="card" style="margin-bottom:14px"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · ${q.required?'OBLIGATORIA':'OPCIONAL'}</div><h3>${esc(q.text)}</h3>${q.type==='text'?'<p class="note">Respuesta abierta opcional, máximo 1.500 caracteres.</p>':`<ol>${(q.choices||[]).filter(c=>c.active!==false).map(c=>`<li>${esc(c.text)}</li>`).join('')}</ol>`}</section>`).join('')}<p class="note">Si en el futuro necesitas cambiar una pregunta, debe crearse una nueva versión para no alterar el significado de las respuestas anteriores.</p>`;
+      $('#admin-content').innerHTML=`<div class="section-label">CUESTIONARIO OPERACIONAL</div><h2>7 preguntas y dimensiones vigentes</h2><p class="muted">Cada pregunta mide una dimensión distinta. Las versiones anteriores permanecen archivadas para conservar la trazabilidad histórica.</p>${operational.map(q=>`<section class="card" style="margin-bottom:14px"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · ${q.required?'OBLIGATORIA':'OPCIONAL'}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'')}</p></div></div>${q.type==='text'?'<p class="note">Respuesta abierta opcional, máximo 1.500 caracteres.</p>':`<ol>${(q.choices||[]).filter(c=>c.active!==false).map(c=>`<li>${esc(c.text)}</li>`).join('')}</ol>`}</section>`).join('')}<p class="note">Si en el futuro necesitas cambiar una pregunta, debe crearse una nueva versión para no alterar el significado de las respuestas anteriores.</p>`;
       return;
     }
     $('#admin-content').innerHTML=`<div class="section-label">GESTIÓN DE CUESTIONARIO</div><h2>Administrar preguntas</h2><p class="muted">Agrega, edita o archiva preguntas. Al editar una pregunta que ya tiene respuestas, se conserva una versión histórica.</p>
