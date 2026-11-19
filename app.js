@@ -137,19 +137,72 @@
   const pctText=v=>v==null?'—':number(v)+'%';
   const mkPill=v=>`<span class="pill ${scoreClass(v)}">${esc(pctText(v))}</span>`;
   const countValid=x=>Number(x?.valid_n||0);
-  function operationalReading(q,total){
+  const round1=n=>Math.round(Number(n||0)*10)/10;
+  function questionAction(q){
+    const key=String(q.key||'');
+    if(key==='EMP2_01')return 'Conviene reforzar con ejemplos prácticos cuándo detener, cómo informar y qué respaldo existe.';
+    if(key==='EMP2_02')return 'Conviene revisar el respaldo visible de la línea de mando y practicar conversaciones de detención sin consecuencias negativas.';
+    if(key==='EMP2_03')return 'Conviene verificar si los reportes están generando controles antes de continuar y conversar los casos sin buscar culpables.';
+    if(key==='EMP2_04')return 'Conviene reforzar el canal, responsable y tiempo esperado para reportar una condición insegura.';
+    if(key==='EMP2_05')return 'Conviene alinear con operaciones que la urgencia no reemplaza la evaluación ni la aplicación de controles.';
+    if(key==='EMP2_06')return 'Conviene verificar quién autoriza el reinicio y cómo se comprueba la eficacia de los controles.';
+    if(key==='EMP2_07')return 'Conviene difundir y practicar la cadena alternativa de escalamiento cuando la jefatura directa no está disponible.';
+    return 'Conviene revisar la tendencia con el equipo y acordar una medida verificable.';
+  }
+  function operationalConclusion(q,total){
     const choices=(q.choices||[]).map(c=>({...c,n:Number(c.n||0),score:c.score==null?null:Number(c.score)}));
     const answered=Number(total||0);
-    if(!answered)return 'Aún no existen respuestas para interpretar esta dimensión.';
+    if(!answered)return 'Aún no existen respuestas para elaborar una conclusión.';
     const ranked=choices.slice().sort((a,b)=>b.n-a.n||Number(a.position)-Number(b.position));
     const top=ranked[0];
-    const topPct=Math.round((top.n/answered)*1000)/10;
-    const alertN=choices.filter(c=>c.score!=null&&c.score<=2).reduce((sum,c)=>sum+c.n,0);
-    const base=answered<5?'Resultado inicial: úsalo como señal exploratoria y evita conclusiones sobre el grupo. ':'';
-    const signal=alertN>0
-      ?`${alertN} respuesta${alertN===1?'':'s'} se ubica${alertN===1?'':'n'} en alternativas que requieren revisión preventiva. `
-      :'No aparecen alternativas críticas en las respuestas disponibles. ';
-    return `${base}${signal}La opción más frecuente es “${top.text}” (${topPct}%).`;
+    const second=ranked[1];
+    const topPct=round1(top.n*100/answered);
+    const valid=choices.filter(c=>c.score!=null).reduce((sum,c)=>sum+c.n,0);
+    const favorable=choices.filter(c=>c.score!=null&&c.score>=4).reduce((sum,c)=>sum+c.n,0);
+    const attention=choices.filter(c=>c.score!=null&&c.score<=2).reduce((sum,c)=>sum+c.n,0);
+    const na=answered-valid;
+    const favorablePct=valid?round1(favorable*100/valid):null;
+    const attentionPct=valid?round1(attention*100/valid):null;
+    const sample=answered<5?`Con ${answered} respuestas, la tendencia es preliminar y todavía no representa a toda la dotación. `:'';
+    let tendency;
+    if(top.n===second?.n&&top.n>0)tendency=`Las respuestas se distribuyen principalmente entre “${top.text}” y “${second.text}”. `;
+    else if(topPct>50)tendency=`La mayoría se inclina por “${top.text}” (${topPct}%). `;
+    else tendency=`La alternativa más seleccionada es “${top.text}” (${topPct}%), sin constituir una mayoría clara. `;
+    let interpretation='';
+    if(valid){
+      if(attentionPct>=25)interpretation=`El ${attentionPct}% de las respuestas válidas se concentra en alternativas que pueden reflejar una brecha de ${String(q.dimension||'esta dimensión').toLowerCase()}. `;
+      else if(favorablePct>=70)interpretation=`Predomina una percepción favorable (${favorablePct}% de las respuestas válidas), aunque conviene mantener el refuerzo y observar cambios. `;
+      else interpretation=`El resultado es mixto: existe una base favorable de ${favorablePct}%, pero todavía no hay una percepción plenamente consolidada. `;
+    }
+    const noExperience=na?`${na} respuesta${na===1?'':'s'} corresponde${na===1?'':'n'} a “no aplica/no ha ocurrido”, por lo que la base interpretativa efectiva es menor. `:'';
+    return sample+tendency+interpretation+noExperience+questionAction(q);
+  }
+  function segmentComparison(q,allRows){
+    const rows=(allRows||[]).filter(x=>String(x.question_id)===String(q.id));
+    const label={area:'Área/faena',cargo:'Cargo',turno:'Turno'};
+    if(!rows.length)return `<details class="segment-details"><summary>Comparación por área, cargo y turno</summary><p class="note">Disponible cuando algún grupo alcance al menos 5 respuestas. Con menos casos, el desglose permanece oculto para proteger el anonimato.</p></details>`;
+    const grouped=new Map();
+    for(const r of rows){
+      const key=r.axis+'|'+r.segment;
+      if(!grouped.has(key))grouped.set(key,{axis:r.axis,name:r.segment,n:Number(r.segment_n||0),counts:new Map(),attention:0,valid:0});
+      const g=grouped.get(key),n=Number(r.n||0),score=r.score==null?null:Number(r.score);
+      g.counts.set(String(r.choice_id),n);
+      if(score!=null){g.valid+=n;if(score<=2)g.attention+=n;}
+    }
+    const groups=[...grouped.values()].map(g=>({...g,attentionPct:g.valid?round1(g.attention*100/g.valid):null}));
+    const legend=(q.choices||[]).map(c=>`<span><i class="seg-color seg-c${esc(c.position)}"></i>${esc(c.text)}</span>`).join('');
+    const panels=['area','cargo','turno'].map(axis=>{
+      const list=groups.filter(g=>g.axis===axis).sort((a,b)=>(b.attentionPct??-1)-(a.attentionPct??-1)||a.name.localeCompare(b.name,'es'));
+      if(!list.length)return '';
+      const bars=list.map(g=>{
+        const pieces=(q.choices||[]).map(c=>{const n=Number(g.counts.get(String(c.id))||0),pct=g.n?round1(n*100/g.n):0;return pct?`<span class="seg-piece seg-c${esc(c.position)}" style="width:${pct}%" title="${esc(c.text)}: ${esc(n)} (${esc(pct)}%)"></span>`:''}).join('');
+        return `<div class="segment-row"><div class="segment-row-head"><strong>${esc(g.name)}</strong><span>N=${esc(g.n)}${g.attentionPct==null?'':` · señal de refuerzo ${esc(g.attentionPct)}%`}</span></div><div class="segment-bar">${pieces}</div></div>`;
+      }).join('');
+      return `<section class="segment-axis"><h4>${esc(label[axis])}</h4>${bars}</section>`;
+    }).join('');
+    const ranked=groups.filter(g=>g.attentionPct!=null).sort((a,b)=>b.attentionPct-a.attentionPct||b.n-a.n);
+    const focus=ranked[0]&&ranked[0].attentionPct>0?`Mayor señal publicable de refuerzo: ${label[ranked[0].axis]} “${ranked[0].name}” (${ranked[0].attentionPct}%, N=${ranked[0].n}).`:'No se observan señales críticas en los grupos que cumplen el mínimo de publicación.';
+    return `<details class="segment-details"><summary>Comparación por área, cargo y turno</summary><p class="note">Las barras muestran cómo se distribuyen las alternativas dentro de cada grupo. Solo se publican grupos con 5 o más respuestas.</p><div class="segment-legend">${legend}</div><div class="segment-focus">${esc(focus)}</div>${panels}</details>`;
   }
   const advice=dim=>{
     const s=String(dim||'').toLowerCase();
@@ -242,7 +295,11 @@
       if(/survey_admin_operational_results|schema cache|function/i.test(fail(err)))return adminLegacyDashboard();
       throw err;
     }
-    const opts=await rpc('survey_admin_options');
+    const [opts,segments]=await Promise.all([
+      rpc('survey_admin_options'),
+      rpc('survey_admin_operational_segments',args).catch(()=>[])
+    ]);
+    data.segments=segments||[];
     store.adminOptions=opts;store.dashboard=data;
     const f=store.filters;
     const filtered=Object.values(f).some(Boolean);
@@ -253,7 +310,7 @@
         const n=Number(c.n||0);const pct=total?Math.round(n*1000/total)/10:0;
         return `<div class="answer-row"><div><strong>${esc(c.text)}</strong><div class="note">${esc(n)} respuesta${n===1?'':'s'} · ${esc(pct)}%</div></div><span class="track"><span class="fill" style="display:block;width:${Math.max(0,Math.min(100,pct))}%"></span></span></div>`;
       }).join('');
-      return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(total)}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'Explorar esta dimensión de la experiencia de seguridad.')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'Una oportunidad para conversar con el equipo y revisar prácticas de trabajo.')}</p></div></div><div class="answer-list">${rows||'<p class="muted">Aún no hay respuestas.</p>'}</div><div class="current-reading"><strong>Lectura orientativa</strong><p>${esc(operationalReading(q,total))}</p></div></section>`;
+      return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(total)}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'Explorar esta dimensión de la experiencia de seguridad.')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'Una oportunidad para conversar con el equipo y revisar prácticas de trabajo.')}</p></div></div><div class="answer-list">${rows||'<p class="muted">Aún no hay respuestas.</p>'}</div><div class="current-reading"><strong>Conclusión orientativa</strong><p>${esc(operationalConclusion(q,total))}</p></div>${segmentComparison(q,segments)}</section>`;
     }).join('');
     const comments=(data.comments||[]).map((x,i)=>`<div class="comment-item"><strong>Comentario ${i+1}</strong><p>${esc(x)}</p></div>`).join('');
     $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">RESULTADOS OPERACIONALES · ESM</div><h2>Percepción y prácticas de seguridad</h2><p class="note">El resultado general se muestra desde la primera respuesta. Los filtros continúan protegidos para grupos menores de cinco personas.</p></div><div class="actions"><button class="button" id="export">↓ Exportar Excel</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
@@ -279,6 +336,8 @@
     if(window.XLSX){
       const wb=XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Resultados');
+      const segmentRows=(data.segments||[]).map(x=>({Pregunta:(data.questions||[]).find(q=>String(q.id)===String(x.question_id))?.position||'',Eje:x.axis,Grupo:x.segment,'N grupo':x.segment_n,Alternativa:x.choice_text,Respuestas:x.n,Puntaje:x.score??''}));
+      if(segmentRows.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(segmentRows),'Comparación grupos');
       XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(comments),'Comentarios');
       XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Encuestas recibidas',data.responses_total],['Encuestas analizadas',data.selected_n],['Preguntas vigentes',7],['Generado',new Date().toLocaleString('es-CL')]]),'Resumen');
       XLSX.writeFile(wb,'ESM_resultados_encuesta_operacional.xlsx');
