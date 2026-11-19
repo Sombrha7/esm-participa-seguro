@@ -13,7 +13,7 @@
     {value:3,label:'Ni de acuerdo ni en desacuerdo'}, {value:4,label:'De acuerdo'},
     {value:5,label:'Totalmente de acuerdo'}, {value:0,label:'No sé / No aplica'}
   ];
-  const store={status:'none',questions:[],areas:[],cargos:[],answers:{},admin:false,tab:'dashboard',filters:{area:'',cargo:'',turno:''},adminQuestions:[],adminOptions:null,dashboard:null,newCodes:[],responseFilters:{area:'',cargo:'',turno:'',from:'',to:''}};
+  const store={status:'none',questions:[],areas:[],cargos:[],answers:{},admin:false,tab:'dashboard',filters:{area:'',cargo:'',turno:''},adminQuestions:[],adminOptions:null,dashboard:null,newCodes:[],responseFilters:{area:'',cargo:'',turno:'',from:'',to:''},archiveId:'',flash:''};
   // El comprobante temporal se mantiene solamente durante esta pestaña.
   // No contiene el código original y NO identifica las respuestas guardadas.
   const TICKET_KEY='esm_encuesta_acceso_v3';
@@ -127,11 +127,11 @@
   async function adminLogout(){await sp.auth.signOut();store.newCodes=[];store.admin=false;store.tab='dashboard';renderLogin();}
   async function renderAdmin(){
     root.innerHTML=`<div class="admin-title"><div><div class="eyebrow">PANEL DE CONTROL ESM</div><h1>Participación y seguridad</h1><p class="muted">Indicadores agrupados · decisiones para la mejora continua</p></div><button class="button" id="logout">Cerrar sesión</button></div>
-      <nav class="admin-tabs" aria-label="Secciones de administración"><button data-tab="dashboard" class="${store.tab==='dashboard'?'active':''}">▤ Análisis estratégico</button><button data-tab="responses" class="${store.tab==='responses'?'active':''}">◫ Gestión de respuestas</button><button data-tab="questions" class="${store.tab==='questions'?'active':''}">☷ Preguntas</button><button data-tab="codes" class="${store.tab==='codes'?'active':''}">♯ Códigos</button><button data-tab="qr" class="${store.tab==='qr'?'active':''}">▦ Enlace y QR</button></nav><section id="admin-content"></section>`;
+      <nav class="admin-tabs" aria-label="Secciones de administración"><button data-tab="dashboard" class="${store.tab==='dashboard'?'active':''}">▤ Análisis estratégico</button><button data-tab="responses" class="${store.tab==='responses'?'active':''}">◫ Gestión de respuestas</button><button data-tab="questions" class="${store.tab==='questions'?'active':''}">☷ Preguntas</button><button data-tab="archives" class="${store.tab==='archives'?'active':''}">▣ Encuestas antiguas</button><button data-tab="codes" class="${store.tab==='codes'?'active':''}">♯ Códigos</button><button data-tab="qr" class="${store.tab==='qr'?'active':''}">▦ Enlace y QR</button></nav><section id="admin-content"></section>`;
     $('#logout').addEventListener('click',adminLogout);
     document.querySelectorAll('[data-tab]').forEach(el=>el.addEventListener('click',()=>{if(store.tab==='codes' && store.newCodes?.length && !confirm('¿Ya descargaste el lote de códigos? Al salir no podrás volver a visualizarlos.'))return; if(store.tab==='codes')store.newCodes=[];store.tab=el.dataset.tab;renderAdmin();}));
     $('#admin-content').innerHTML='<div class="card loading"><span class="spinner"></span></div>';
-    try{if(store.tab==='dashboard')await adminDashboard();else if(store.tab==='responses')await adminResponses();else if(store.tab==='questions')await adminQuestions();else if(store.tab==='codes')await adminCodes();else adminQR();}catch(e){$('#admin-content').innerHTML=`<div class="card">${banner(fail(e))}<button class="button" id="refresh">Reintentar</button></div>`;$('#refresh')?.addEventListener('click',()=>renderAdmin());}
+    try{if(store.tab==='dashboard')await adminDashboard();else if(store.tab==='responses')await adminResponses();else if(store.tab==='questions')await adminQuestions();else if(store.tab==='archives')await adminArchives();else if(store.tab==='codes')await adminCodes();else adminQR();}catch(e){$('#admin-content').innerHTML=`<div class="card">${banner(fail(e))}<button class="button" id="refresh">Reintentar</button></div>`;$('#refresh')?.addEventListener('click',()=>renderAdmin());}
   }
   function metric(label,value,desc){return `<article class="metric"><div class="m-label">${esc(label)}</div><strong>${esc(number(value))}</strong><div class="m-sub">${esc(desc)}</div></article>`;}
   // Dashboard estratégico: el universo son las ENCUESTAS recibidas, jamás los códigos emitidos.
@@ -233,7 +233,45 @@
   function executiveParticipation(segments,questions,total){
     const axes=participationAxes(segments,questions);
     const coverage=`${axes.area.length} área${axes.area.length===1?'':'s'} · ${axes.cargo.length} cargo${axes.cargo.length===1?'':'s'} · ${axes.turno.length} turno${axes.turno.length===1?'':'s'}`;
-    return {axes,html:`<section class="card executive-summary"><div class="executive-heading"><div><div class="section-label">RESUMEN EJECUTIVO</div><h3>Participación por variables operativas</h3><p class="note">Distribución de las encuestas analizadas. Estas barras muestran participación, no nivel de desempeño ni cumplimiento.</p></div><div class="executive-coverage"><strong>${esc(total)}</strong><span>encuestas</span><small>${esc(coverage)}</small></div></div><div class="executive-grid">${participationPanel('Por área/faena','area',axes.area,total)}${participationPanel('Por cargo','cargo',axes.cargo,total)}${participationPanel('Por turno','turno',axes.turno,total)}</div></section>`};
+    return {axes,html:`<section class="card executive-summary"><div class="executive-heading"><div><div class="section-label">RESUMEN EJECUTIVO</div><h3>Resumen por faena, cargo y turno</h3></div><div class="executive-coverage"><strong>${esc(total)}</strong><span>encuestas</span><small>${esc(coverage)}</small></div></div><div class="executive-grid">${participationPanel('Por área/faena','area',axes.area,total)}${participationPanel('Por cargo','cargo',axes.cargo,total)}${participationPanel('Por turno','turno',axes.turno,total)}</div></section>`};
+  }
+  function archiveResetPanel(prefix,total){
+    return `<section class="card strategic-section archive-reset-panel" id="${esc(prefix)}-panel" hidden>
+      <div class="section-label">ARCHIVAR Y REINICIAR</div><h3>Guardar el resumen antes de empezar desde cero</h3>
+      <p class="muted">Se guardará un resumen agregado en “Encuestas antiguas” y luego se eliminarán las ${esc(total)} encuestas activas. No se conservarán respuestas individuales.</p>
+      <form class="form" id="${esc(prefix)}-form">
+        <label class="form-label">Nombre para identificar esta encuesta
+          <input data-field="archive-name" minlength="3" maxlength="120" required placeholder="Ejemplo: Pruebas 1"></label>
+        <label class="form-label">Escribe exactamente <strong>REINICIAR ENCUESTA</strong> para continuar
+          <input data-field="confirmation" autocomplete="off" required spellcheck="false"></label>
+        <div class="archive-warning"><strong>Importante:</strong> los códigos ya utilizados o activados no se reactivarán. Para la aplicación oficial, genera y distribuye códigos nuevos.</div>
+        <div class="actions"><button class="button danger" type="submit" data-action="confirm-reset">Guardar resumen y reiniciar</button><button class="button" type="button" data-action="cancel-reset">Cancelar</button></div>
+        <div data-field="feedback"></div>
+      </form></section>`;
+  }
+  function wireArchiveReset(prefix,total){
+    const open=document.getElementById(prefix+'-open');
+    const panel=document.getElementById(prefix+'-panel');
+    const form=document.getElementById(prefix+'-form');
+    if(!open||!panel||!form)return;
+    open.addEventListener('click',()=>{form.reset();panel.hidden=false;panel.scrollIntoView({behavior:'smooth',block:'start'});});
+    panel.querySelector('[data-action="cancel-reset"]').addEventListener('click',()=>{panel.hidden=true;});
+    form.addEventListener('submit',async e=>{
+      e.preventDefault();
+      const name=form.querySelector('[data-field="archive-name"]').value.trim();
+      const confirmation=form.querySelector('[data-field="confirmation"]').value.trim();
+      const feedback=form.querySelector('[data-field="feedback"]');
+      if(name.length<3){feedback.innerHTML=banner('Escribe un nombre de al menos 3 caracteres.');return;}
+      if(confirmation!=='REINICIAR ENCUESTA'){feedback.innerHTML=banner('La frase de confirmación no coincide.');return;}
+      if(!confirm(`Se guardará “${name}” y se reiniciarán ${total} encuestas. ¿Deseas continuar?`))return;
+      const button=form.querySelector('[data-action="confirm-reset"]');button.disabled=true;feedback.innerHTML='';
+      try{
+        const result=await rpc('survey_admin_archive_and_reset',{p_name:name,p_confirmation:'REINICIAR ENCUESTA'});
+        store.dashboard=null;store.filters={area:'',cargo:'',turno:''};store.responseFilters={area:'',cargo:'',turno:'',from:'',to:''};store.archiveId=result.archive_id||'';
+        store.flash=`La encuesta “${name}” fue guardada en el historial y se reiniciaron ${result.deleted} respuestas.`;
+        store.tab='archives';await renderAdmin();
+      }catch(err){feedback.innerHTML=banner(fail(err));button.disabled=false;}
+    });
   }
   const advice=dim=>{
     const s=String(dim||'').toLowerCase();
@@ -346,7 +384,8 @@
       return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(total)}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'Explorar esta dimensión de la experiencia de seguridad.')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'Una oportunidad para conversar con el equipo y revisar prácticas de trabajo.')}</p></div></div><div class="answer-list">${rows||'<p class="muted">Aún no hay respuestas.</p>'}</div><div class="current-reading"><strong>Conclusión orientativa</strong><p>${esc(operationalConclusion(q,total))}</p></div>${segmentComparison(q,segments)}</section>`;
     }).join('');
     const comments=(data.comments||[]).map((x,i)=>`<div class="comment-item"><strong>Comentario ${i+1}</strong><p>${esc(x)}</p></div>`).join('');
-    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">RESULTADOS OPERACIONALES · ESM</div><h2>Percepción y prácticas de seguridad</h2><p class="note">El resultado general y los gráficos por área, cargo y turno se muestran desde la primera respuesta. Vista administrativa confidencial.</p></div><div class="actions"><button class="button" id="export">↓ Exportar Excel</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
+    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">RESULTADOS OPERACIONALES · ESM</div><h2>Percepción y prácticas de seguridad</h2><p class="note">El resultado general y los gráficos por área, cargo y turno se muestran desde la primera respuesta. Vista administrativa confidencial.</p></div><div class="actions"><button class="button danger" id="dashboard-reset-open" ${Number(data.responses_total||0)>0?'':'disabled'}>Borrar y reiniciar encuesta</button><button class="button" id="export">↓ Exportar Excel</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
+      ${archiveResetPanel('dashboard-reset',Number(data.responses_total||0))}
       <div class="filters"><label class="form-label">Área<select id="filter-area">${selectOptions(opts.areas,f.area,'Todas las áreas')}</select></label><label class="form-label">Cargo<select id="filter-cargo">${selectOptions(opts.cargos,f.cargo,'Todos los cargos')}</select></label><label class="form-label">Turno<select id="filter-turno">${selectOptions(['A','B'],f.turno,'Ambos turnos')}</select></label></div>
       <div class="metrics">${metric('Encuestas recibidas',data.responses_total,'Respuestas de la nueva versión')}${metric('Encuestas analizadas',data.suppressed?'Protegido':data.selected_n,filtered?'Selección filtrada':'Resultado general')}${metric('Dimensiones evaluadas',questions.filter(q=>q.type==='single_choice').length,'Una pregunta por dimensión')}${metric('Cargos participando',participatingCargos,'Con al menos una encuesta')}</div>
       ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Resultados protegidos</strong><p>La selección contiene menos de cinco encuestas. Amplía el filtro o reúne más respuestas para evitar la identificación indirecta.</p></div></div>`:`${participation.html}<div class="operational-grid">${choiceSections}</div>${comments?`<section class="card"><h3>Sugerencias abiertas históricas</h3><p class="note">Los comentarios no incluyen nombre, RUT, código ni correo. Revisa si el propio texto contiene datos personales antes de compartirlo.</p>${comments}</section>`:''}`}
@@ -354,6 +393,7 @@
     ['area','cargo','turno'].forEach(id=>$('#filter-'+id).addEventListener('change',e=>{store.filters[id]=e.target.value;adminDashboard().catch(err=>$('#admin-content').innerHTML=banner(fail(err)));}));
     $('#reload').addEventListener('click',()=>adminDashboard());$('#print').addEventListener('click',()=>print());
     $('#export').disabled=!!data.suppressed;$('#export').addEventListener('click',()=>exportOperationalExcel(data));
+    wireArchiveReset('dashboard-reset',Number(data.responses_total||0));
   }
   async function exportOperationalExcel(data){
     const rows=[];
@@ -439,14 +479,15 @@
           <p class="note">${isAll?'Selecciona al menos un filtro para usar esta opción.':preview.protected?'Selección protegida (menos de cinco).':preview.eligible_filtered_delete?'Hay una selección publicable para revisar.':'No hay selección eliminable.'}</p>
         </section>
         <section class="card">
-          <h3>Reiniciar todas las encuestas</h3>
-          <p class="muted">Úsalo únicamente para limpiar pruebas o iniciar una campaña desde cero. Elimina todas las encuestas y sus respuestas, aunque exista solo una.</p>
-          <button class="button danger" type="button" id="manage-delete-all" ${preview.can_reset_all?'':'disabled'}>Eliminar todas las encuestas</button>
-          <p class="note">Los códigos utilizados seguirán utilizados. Este procedimiento no crea ni reactiva credenciales.</p>
+          <h3>Borrar y reiniciar encuesta</h3>
+          <p class="muted">Guarda primero un resumen con el nombre que elijas y después deja el panel activo en cero para comenzar una nueva aplicación.</p>
+          <button class="button danger" type="button" id="manage-reset-open" ${preview.can_reset_all?'':'disabled'}>Borrar y reiniciar encuesta</button>
+          <p class="note">El resumen quedará disponible en “Encuestas antiguas”. Los códigos usados no se reactivarán.</p>
         </section>
       </div>
+      ${archiveResetPanel('manage-reset',Number(preview.global_total||0))}
       <section class="card strategic-section management-confirm" id="delete-confirm-panel" hidden>
-        <div class="section-label">ACCIÓN IRREVERSIBLE</div><h3 id="delete-confirm-title">Confirmar eliminación</h3>
+        <div class="section-label">ELIMINACIÓN SELECTIVA</div><h3 id="delete-confirm-title">Confirmar eliminación filtrada</h3>
         <p class="muted" id="delete-confirm-description"></p>
         <form id="delete-confirm-form" class="form">
           <label class="form-label">Motivo (obligatorio, mínimo 12 caracteres)
@@ -475,64 +516,107 @@
       store.responseFilters={area:'',cargo:'',turno:'',from:'',to:''};
       adminResponses().catch(e=>$('#admin-content').innerHTML=banner(fail(e)));
     });
-    let deleteAll=false;
     const panel=$('#delete-confirm-panel');
-    const openConfirm=all=>{
-      deleteAll=all;
+    const openConfirm=()=>{
       $('#delete-confirm-form').reset();$('#delete-feedback').innerHTML='';
-      const phrase=all?'ELIMINAR TODAS':'ELIMINAR FILTRO';
+      const phrase='ELIMINAR FILTRO';
       $('#delete-confirm-phrase').textContent=phrase;
-      $('#delete-confirm-title').textContent=all?'Reiniciar toda la campaña':'Eliminar encuestas filtradas';
-      $('#delete-confirm-description').textContent=all?
-        `Se eliminarán las ${preview.global_total} encuestas registradas en toda la campaña, sin importar los filtros. Esta acción no se puede revertir.`:
-        `Se eliminarán las ${preview.selected_count} encuestas que coinciden con los filtros aplicados. Esta acción no se puede revertir.`;
+      $('#delete-confirm-description').textContent=`Se eliminarán las ${preview.selected_count} encuestas que coinciden con los filtros aplicados. Esta selección no se incorporará al resumen histórico.`;
       panel.hidden=false;panel.scrollIntoView({behavior:'smooth',block:'start'});
     };
-    $('#manage-delete-filter').addEventListener('click',()=>openConfirm(false));
-    $('#manage-delete-all').addEventListener('click',()=>openConfirm(true));
+    $('#manage-delete-filter').addEventListener('click',openConfirm);
     $('#delete-cancel').addEventListener('click',()=>{panel.hidden=true;});
     $('#delete-confirm-form').addEventListener('submit',async e=>{
-      e.preventDefault();const required=deleteAll?'ELIMINAR TODAS':'ELIMINAR FILTRO';
+      e.preventDefault();const required='ELIMINAR FILTRO';
       const typed=$('#delete-confirm-input').value.trim();
       if(typed!==required){$('#delete-feedback').innerHTML=banner('La frase de confirmación no coincide.');return;}
       const reason=$('#delete-reason').value.trim();
       if(reason.length<12){$('#delete-feedback').innerHTML=banner('Especifica un motivo de al menos 12 caracteres.');return;}
-      const expected=deleteAll?Number(preview.global_total):Number(preview.selected_count);
+      const expected=Number(preview.selected_count);
       if(!confirm(`Confirmación final: ¿eliminar definitivamente ${expected} encuestas?`))return;
       const btn=$('#delete-confirm-button');btn.disabled=true;
       $('#delete-feedback').innerHTML='';
       try{
         const result=await rpc('survey_admin_delete_responses',{
-          p_area:deleteAll?null:args.p_area,
-          p_cargo:deleteAll?null:args.p_cargo,
-          p_turno:deleteAll?null:args.p_turno,
-          p_day_from:deleteAll?null:args.p_day_from,
-          p_day_to:deleteAll?null:args.p_day_to,
-          p_reason:reason,p_confirmation:required,p_expected_count:expected,p_all:deleteAll
+          p_area:args.p_area,p_cargo:args.p_cargo,p_turno:args.p_turno,
+          p_day_from:args.p_day_from,p_day_to:args.p_day_to,
+          p_reason:reason,p_confirmation:required,p_expected_count:expected,p_all:false
         });
         store.dashboard=null;
-        if(deleteAll)store.responseFilters={area:'',cargo:'',turno:'',from:'',to:''};
         await adminResponses(`Eliminación registrada: ${result.deleted} encuestas. Los códigos ya utilizados permanecen bloqueados.`);
       }catch(err){$('#delete-feedback').innerHTML=banner(fail(err));btn.disabled=false;}
     });
+    wireArchiveReset('manage-reset',Number(preview.global_total||0));
   }
 
   async function adminQuestions(message=''){
-    const list=await rpc('survey_admin_questions');store.adminQuestions=list;
+    const [list,preview]=await Promise.all([
+      rpc('survey_admin_questions'),
+      rpc('survey_admin_responses_preview',{p_area:null,p_cargo:null,p_turno:null,p_day_from:null,p_day_to:null})
+    ]);store.adminQuestions=list;
     const operational=(list||[]).filter(q=>q.active&&String(q.key||'').startsWith('EMP2_')).sort((a,b)=>Number(a.position)-Number(b.position));
-    if(operational.length){
-      $('#admin-content').innerHTML=`<div class="section-label">CUESTIONARIO OPERACIONAL</div><h2>7 preguntas y dimensiones vigentes</h2><p class="muted">Cada pregunta mide una dimensión distinta. Las versiones anteriores permanecen archivadas para conservar la trazabilidad histórica.</p>${operational.map(q=>`<section class="card" style="margin-bottom:14px"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · ${q.required?'OBLIGATORIA':'OPCIONAL'}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'')}</p></div></div>${q.type==='text'?'<p class="note">Respuesta abierta opcional, máximo 1.500 caracteres.</p>':`<ol>${(q.choices||[]).filter(c=>c.active!==false).map(c=>`<li>${esc(c.text)}</li>`).join('')}</ol>`}</section>`).join('')}<p class="note">Si en el futuro necesitas cambiar una pregunta, debe crearse una nueva versión para no alterar el significado de las respuestas anteriores.</p>`;
-      return;
+    const total=Number(preview.global_total||0);
+    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">CUESTIONARIO OPERACIONAL</div><h2>7 preguntas y dimensiones vigentes</h2><p class="muted">Puedes modificar el texto, la dimensión, la lectura orientativa y las cinco alternativas.</p></div></div>
+      ${message?banner(message,false):''}
+      ${notice(total?`Actualmente existen ${total} encuestas. Al guardar un cambio se archivará su resumen con el nombre que indiques y la encuesta activa se reiniciará en cero.`:'No existen encuestas activas. Los cambios se guardarán sin crear un archivo histórico vacío.')}
+      <div id="question-editor-slot"></div>
+      <div class="question-admin-list">${operational.map(q=>`<section class="card question-config-card"><div class="question-config-head"><div><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · OBLIGATORIA</div><h3>${esc(q.text)}</h3></div><button class="button primary small" type="button" data-edit-operational="${esc(q.id)}">Modificar</button></div><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'')}</p></div></div><ol>${(q.choices||[]).filter(c=>c.active!==false).sort((a,b)=>Number(a.position)-Number(b.position)).map(c=>`<li>${esc(c.text)}</li>`).join('')}</ol></section>`).join('')||'<div class="card">No se encontraron las siete preguntas operacionales.</div>'}</div>`;
+    const slot=$('#question-editor-slot');
+    const openEditor=q=>{
+      const choices=(q.choices||[]).filter(c=>c.active!==false).sort((a,b)=>Number(a.position)-Number(b.position));
+      while(choices.length<5)choices.push({id:null,text:'',position:choices.length+1,score:null});
+      slot.innerHTML=`<section class="card question-editor-card"><div class="section-label">MODIFICAR PREGUNTA ${esc(q.position)}</div><h3>Editar contenido del cuestionario</h3>
+        <form class="form" id="operational-question-editor">
+          <div class="question-editor-grid"><label class="form-label">Dimensión<input name="dimension" required minlength="3" maxlength="100" value="${esc(q.dimension)}"></label>
+          <label class="form-label question-editor-wide">Pregunta para trabajadores<textarea name="question" required minlength="12" maxlength="350">${esc(q.text)}</textarea></label>
+          <label class="form-label">Qué busca<textarea name="purpose" required minlength="10" maxlength="1000">${esc(q.purpose||'')}</textarea></label>
+          <label class="form-label">Qué puede reflejar<textarea name="guidance" required minlength="10" maxlength="1000">${esc(q.guidance||'')}</textarea></label></div>
+          <div class="choice-editor"><h4>Cinco alternativas de respuesta</h4>${choices.slice(0,5).map((c,i)=>`<label class="form-label">Alternativa ${i+1}<input data-choice="${i}" required maxlength="300" value="${esc(c.text)}"></label>`).join('')}</div>
+          ${total?`<div class="edit-reset-warning"><strong>Este cambio reiniciará la encuesta activa.</strong><p>Antes de modificarla se guardará el resumen de las ${esc(total)} encuestas actuales en “Encuestas antiguas”.</p><label class="form-label">Nombre para el historial<input name="archive-name" minlength="3" maxlength="120" required placeholder="Ejemplo: Pruebas 1"></label><label class="confirm-check"><input type="checkbox" name="understood" required> Comprendo que las respuestas activas se eliminarán después de guardar el resumen.</label></div>`:`<div class="notice"><span class="icon">◈</span><div>No hay resultados que archivar. El cambio se aplicará directamente y se cerrarán los códigos que tengan un formulario antiguo abierto.</div></div>`}
+          <div class="actions"><button class="button primary" type="submit" id="save-operational-question">Guardar cambios</button><button class="button" type="button" id="cancel-operational-edit">Cancelar</button></div><div id="question-editor-feedback"></div>
+        </form></section>`;
+      slot.scrollIntoView({behavior:'smooth',block:'start'});
+      $('#cancel-operational-edit').addEventListener('click',()=>{slot.innerHTML='';});
+      $('#operational-question-editor').addEventListener('submit',async e=>{
+        e.preventDefault();const form=e.currentTarget,feedback=$('#question-editor-feedback');
+        const values=new FormData(form),archiveName=String(values.get('archive-name')||'').trim();
+        const editedChoices=[...form.querySelectorAll('[data-choice]')].map((input,i)=>({id:choices[i]?.id||null,position:i+1,text:input.value.trim(),score:choices[i]?.score??null}));
+        if(editedChoices.some(c=>!c.text)){feedback.innerHTML=banner('Completa las cinco alternativas.');return;}
+        if(total&&archiveName.length<3){feedback.innerHTML=banner('Escribe un nombre para guardar la encuesta actual.');return;}
+        const warning=total?`Se archivarán y retirarán ${total} respuestas antes de modificar la pregunta.`:'Se modificará la pregunta vigente.';
+        if(!confirm(`${warning} ¿Deseas guardar los cambios?`))return;
+        const button=$('#save-operational-question');button.disabled=true;feedback.innerHTML='';
+        try{
+          const result=await rpc('survey_admin_update_operational_question',{
+            p_question_id:q.id,p_question_text:String(values.get('question')||'').trim(),p_dimension:String(values.get('dimension')||'').trim(),
+            p_purpose:String(values.get('purpose')||'').trim(),p_guidance:String(values.get('guidance')||'').trim(),p_choices:editedChoices,
+            p_archive_name:archiveName||null,p_confirmation:total?'ARCHIVAR Y ACTUALIZAR':'ACTUALIZAR CUESTIONARIO'
+          });
+          store.dashboard=null;if(result.archive_id)store.archiveId=result.archive_id;
+          await adminQuestions(result.archived?`Cambios guardados. Se archivaron ${result.deleted} encuestas como “${archiveName}” y la aplicación activa quedó en cero.`:'Pregunta actualizada correctamente.');
+        }catch(err){feedback.innerHTML=banner(fail(err));button.disabled=false;}
+      });
+    };
+    document.querySelectorAll('[data-edit-operational]').forEach(btn=>btn.addEventListener('click',()=>{const q=operational.find(x=>String(x.id)===String(btn.dataset.editOperational));if(q)openEditor(q);}));
+  }
+
+  async function adminArchives(){
+    const archives=await rpc('survey_admin_campaign_archives');
+    const flash=store.flash;store.flash='';
+    if(!store.archiveId&&archives?.length)store.archiveId=archives[0].id;
+    if(store.archiveId&&!(archives||[]).some(x=>String(x.id)===String(store.archiveId)))store.archiveId=archives?.[0]?.id||'';
+    const detail=store.archiveId?await rpc('survey_admin_campaign_archive',{p_archive_id:store.archiveId}):null;
+    const listHtml=(archives||[]).map(x=>`<button type="button" class="archive-list-item ${String(x.id)===String(store.archiveId)?'active':''}" data-archive-id="${esc(x.id)}"><strong>${esc(x.name)}</strong><span>${esc(new Date(x.archived_at).toLocaleString('es-CL',{dateStyle:'medium',timeStyle:'short'}))}</span><small>${esc(x.responses_count)} encuestas · ${x.reason==='question_update'?'Actualización de pregunta':'Reinicio manual'}</small></button>`).join('');
+    let archiveView='<section class="card archive-empty"><h3>Aún no existen encuestas antiguas</h3><p class="muted">Cuando uses “Borrar y reiniciar encuesta”, aquí quedará guardado el resumen agregado.</p></section>';
+    if(detail){
+      const data=detail.summary||{},questions=(data.questions||[]).slice().sort((a,b)=>Number(a.position)-Number(b.position));
+      const total=Number(detail.responses_count||data.responses_total||0),participation=executiveParticipation(data.segments||[],questions,total);
+      const questionCards=questions.map(q=>{const qTotal=Number(q.answered_n||0);const rows=(q.choices||[]).map(c=>{const n=Number(c.n||0),pct=qTotal?round1(n*100/qTotal):0;return `<div class="answer-row"><div><strong>${esc(c.text)}</strong><div class="note">${esc(n)} respuesta${n===1?'':'s'} · ${esc(pct)}%</div></div><span class="track"><span class="fill" style="display:block;width:${Math.max(0,Math.min(100,pct))}%"></span></span></div>`;}).join('');return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(qTotal)}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'')}</p></div></div><div class="answer-list">${rows}</div><div class="current-reading"><strong>Conclusión orientativa</strong><p>${esc(operationalConclusion(q,qTotal))}</p></div></section>`;}).join('');
+      archiveView=`<div class="toolbar archive-detail-head"><div><div class="section-label">RESUMEN HISTÓRICO</div><h2>${esc(detail.name)}</h2><p class="muted">Archivada el ${esc(new Date(detail.archived_at).toLocaleString('es-CL',{dateStyle:'long',timeStyle:'short'}))} · ${esc(total)} encuestas</p></div><div class="actions"><button class="button" id="print-archive">▣ Imprimir</button></div></div>${notice('Este archivo conserva únicamente resultados agregados. No contiene códigos ni respuestas individuales.')}${participation.html}<div class="operational-grid">${questionCards}</div>`;
     }
-    $('#admin-content').innerHTML=`<div class="section-label">GESTIÓN DE CUESTIONARIO</div><h2>Administrar preguntas</h2><p class="muted">Agrega, edita o archiva preguntas. Al editar una pregunta que ya tiene respuestas, se conserva una versión histórica.</p>
-      ${message?banner(message,false):''}<div class="cols"><div class="card"><h3 id="form-title">Nueva pregunta</h3><form id="question-editor" class="form"><input type="hidden" id="q-id"><label class="form-label">Dimensión<input required minlength="3" maxlength="100" id="q-dimension" placeholder="Ej.: Confianza"></label><label class="form-label">Pregunta para trabajadores<textarea id="q-text" minlength="12" maxlength="350" required placeholder="Escribe una pregunta clara y específica"></textarea></label><div class="actions"><button class="button primary" type="submit" id="save-question">Guardar pregunta</button><button type="button" class="button" id="cancel-edit">Limpiar</button></div></form><div id="editor-feedback"></div></div>
-      <div class="card"><h3>Preguntas activas e históricas</h3>${list.map(q=>`<div class="question-admin"><div><div class="q-meta">${esc(q.dimension)} · ${q.active?'ACTIVA':'ARCHIVADA'}</div><p>${esc(q.text)}</p></div><div class="actions"><button class="button small" data-edit="${esc(q.id)}">Editar</button><button class="button small ${q.active?'danger':''}" data-toggle="${esc(q.id)}">${q.active?'Archivar':'Reactivar'}</button></div></div>`).join('')}</div></div>`;
-    $('#question-editor').addEventListener('submit',async e=>{e.preventDefault();const btn=$('#save-question');btn.disabled=true;$('#editor-feedback').innerHTML='';try{
-      await rpc('survey_admin_save_question',{p_id:$('#q-id').value||null,p_text:$('#q-text').value.trim(),p_dimension:$('#q-dimension').value.trim()});await adminQuestions('Pregunta guardada correctamente.');
-    }catch(err){$('#editor-feedback').innerHTML=banner(fail(err));btn.disabled=false;}});
-    $('#cancel-edit').addEventListener('click',()=>{$('#question-editor').reset();$('#q-id').value='';$('#form-title').textContent='Nueva pregunta';});
-    document.querySelectorAll('[data-edit]').forEach(btn=>btn.addEventListener('click',()=>{const q=list.find(x=>x.id===btn.dataset.edit);if(!q)return;$('#q-id').value=q.id;$('#q-dimension').value=q.dimension;$('#q-text').value=q.text;$('#form-title').textContent='Editar pregunta';$('#question-editor').scrollIntoView({behavior:'smooth',block:'start'});}));
-    document.querySelectorAll('[data-toggle]').forEach(btn=>btn.addEventListener('click',async()=>{const q=list.find(x=>x.id===btn.dataset.toggle);if(!q)return;const verb=q.active?'archivar':'reactivar';if(!confirm(`¿Deseas ${verb} esta pregunta? Se conservarán los resultados históricos.`))return;btn.disabled=true;try{await rpc('survey_admin_toggle_question',{p_id:q.id,p_active:!q.active});await adminQuestions('Pregunta actualizada.');}catch(err){alert(fail(err));btn.disabled=false;}}));
+    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">TRAZABILIDAD DE CAMPAÑAS</div><h2>Encuestas antiguas</h2><p class="muted">Consulta los resúmenes guardados antes de cada reinicio o modificación del cuestionario.</p></div></div>${flash?banner(flash,false):''}<div class="archive-layout"><aside class="card archive-list"><h3>Historial guardado</h3>${listHtml||'<p class="muted">Sin archivos todavía.</p>'}</aside><main class="archive-detail">${archiveView}</main></div>`;
+    document.querySelectorAll('[data-archive-id]').forEach(btn=>btn.addEventListener('click',()=>{store.archiveId=btn.dataset.archiveId;adminArchives().catch(err=>$('#admin-content').innerHTML=banner(fail(err)));}));
+    $('#print-archive')?.addEventListener('click',()=>print());
   }
 
   // Los códigos legibles se muestran UNA SOLA VEZ después de generarse.

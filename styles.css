@@ -89,9 +89,9 @@
 .answer-row:last-child{border-bottom:0;padding-bottom:0}
 .answer-row strong{font-size:13px;line-height:1.35;display:block}
 .analysis-note{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0 6px}
-.analysis-note>div{border:1px solid #dbe8ef;border-radius:11px;background:#f7fbfd;padding:11px 12px}
-.analysis-note span{display:block;color:#147b94;font-size:10px;font-weight:850;letter-spacing:.65px;margin-bottom:4px}
-.analysis-note p{font-size:12px;line-height:1.45;margin:0;color:#4f687b}
+.analysis-note>div{border:1px solid #a9d5e6;border-radius:11px;background:#e5f4fb;padding:11px 12px}
+.analysis-note span{display:block;color:#075f84;font-size:10px;font-weight:850;letter-spacing:.65px;margin-bottom:4px}
+.analysis-note p{font-size:12px;line-height:1.45;margin:0;color:#244d68}
 .current-reading{margin-top:15px;border-left:4px solid #178aa3;background:#eff9fc;border-radius:9px;padding:11px 13px}
 .current-reading strong{display:block;color:#155f74;font-size:12px;margin-bottom:3px}
 .current-reading p{font-size:12px;line-height:1.5;margin:0;color:#3d5e70}
@@ -142,3 +142,37 @@
 .executive-area{background:#188ca4}.executive-cargo{background:#356fa3}.executive-turno{background:#d69b2d}
 @media(max-width:1000px){.main.admin-main{width:100%;max-width:none}.executive-grid{grid-template-columns:1fr 1fr}.executive-grid .executive-axis:last-child{grid-column:1/-1}}
 @media(max-width:620px){.executive-heading{flex-direction:column}.executive-coverage{width:100%;text-align:left}.executive-grid{grid-template-columns:1fr}.executive-grid .executive-axis:last-child{grid-column:auto}}
+
+/* Archivo de campañas, reinicio seguro y edición del cuestionario */
+.archive-reset-panel{border:2px solid #d89191;background:#fffafa}
+.archive-reset-panel[hidden]{display:none!important}
+.archive-reset-panel h3{color:#8f3032;margin-top:8px}
+.archive-warning,.edit-reset-warning{border-left:4px solid #c77915;border-radius:9px;background:#fff5df;color:#624716;padding:12px 14px;font-size:13px}
+.edit-reset-warning p{margin:5px 0 12px}
+.edit-reset-warning .form-label{color:#4f421f}
+.confirm-check{display:flex;align-items:flex-start;gap:9px;font-size:13px;font-weight:700;color:#5d4217}
+.confirm-check input{margin-top:3px;accent-color:#a75522}
+.question-admin-list{display:grid;gap:14px;margin-top:17px}
+.question-config-card{padding:22px}
+.question-config-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.question-config-head h3{margin:5px 0 0;max-width:1180px}
+.question-config-card .q-meta,.question-editor-card .section-label{color:#0f7793;font-size:11px;font-weight:850;letter-spacing:.55px}
+.question-editor-card{margin:18px 0;border:2px solid #7cbdd3;background:#fafdff}
+.question-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.question-editor-wide{grid-column:1/-1}
+.choice-editor{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:15px;border:1px solid #cfe2ec;border-radius:12px;background:#fff}
+.choice-editor h4{grid-column:1/-1;margin:0 0 2px;color:#205d78}
+.archive-layout{display:grid;grid-template-columns:minmax(245px,320px) minmax(0,1fr);gap:17px;align-items:start}
+.archive-list{display:grid;gap:8px;position:sticky;top:16px}
+.archive-list h3{margin-bottom:4px}
+.archive-list-item{display:grid;gap:2px;text-align:left;width:100%;border:1px solid #d8e5ed;border-radius:11px;background:#f9fcfd;color:#24475e;padding:12px}
+.archive-list-item:hover{border-color:#87b9cd;background:#f1f9fc}
+.archive-list-item.active{border-color:#137c9a;background:#e5f4fb;box-shadow:inset 4px 0 #137c9a}
+.archive-list-item strong{font-size:14px;color:#123d58}
+.archive-list-item span{font-size:12px;color:#536f82}
+.archive-list-item small{font-size:11px;color:#728797}
+.archive-detail{min-width:0}
+.archive-detail-head{padding:2px 2px 0}
+.archive-empty{text-align:center;padding:42px 24px}
+@media(max-width:900px){.archive-layout{grid-template-columns:1fr}.archive-list{position:static;grid-template-columns:repeat(2,minmax(0,1fr))}.archive-list h3{grid-column:1/-1}.question-editor-grid{grid-template-columns:1fr}.question-editor-wide{grid-column:auto}}
+@media(max-width:620px){.question-config-head{flex-direction:column}.question-config-head .button{width:100%}.choice-editor,.archive-list{grid-template-columns:1fr}.choice-editor h4,.archive-list h3{grid-column:auto}}
