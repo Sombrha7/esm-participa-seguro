@@ -35,6 +35,8 @@
   function pageIntro(){return `<section class="hero"><div class="eyebrow">ESM · CULTURA PREVENTIVA</div><h1>Tu voz también protege.</h1><p>Queremos conocer tu experiencia y percepción sobre la seguridad en el trabajo. Responde las siguientes preguntas con sinceridad.</p></section>`;}
   async function init(){
     toggleNav();
+    root.classList.toggle('admin-main',route()==='admin');
+    document.body.classList.toggle('admin-view',route()==='admin');
     if(!sp){root.innerHTML=`${pageIntro()}<div class="card entry-card"><h2>Falta conectar Supabase</h2><p class="muted">Abre el archivo <b>config.js</b> y reemplaza los datos de ejemplo por la URL y la llave publicable de tu proyecto Supabase. Luego publica estos archivos en GitHub Pages.</p>${notice('Nunca publiques contraseñas ni claves de servicio en GitHub.')}</div>`;return;}
     waiting();
     try {if(route()==='admin') await adminPage();else await workerPage();}
@@ -59,7 +61,7 @@
   function renderWorker(error='',success=''){
     const intro=pageIntro();
     if(store.status==='submitted'){
-      root.innerHTML=intro+`<div class="card complete"><div class="check">✓</div><h2>¡Gracias por participar!</h2><p>Tu encuesta fue recibida. No se guarda junto a tu código de acceso.</p>${notice('Los resultados se entregan de manera agrupada, no por persona.')}<button class="button primary" type="button" id="new-survey">Realizar otra encuesta →</button></div>`;
+      root.innerHTML=intro+`<div class="card complete"><div class="check">✓</div><h2>¡Gracias por participar!</h2><p>Tu encuesta fue recibida. No se guarda junto a tu código de acceso.</p>${notice('El panel administrativo analiza las respuestas por área, cargo y turno. No se solicita nombre, RUT ni correo electrónico.')}<button class="button primary" type="button" id="new-survey">Realizar otra encuesta →</button></div>`;
       $('#new-survey').addEventListener('click',()=>{
         // El código anterior permanece consumido en Supabase. Solo se limpia
         // el comprobante de ESTA pestaña para que participe otra persona.
@@ -79,7 +81,7 @@
       root.innerHTML=intro+`<div class="card entry-card"><div class="section-label">ACCESO CONFIDENCIAL</div><h2>Ingresa a la encuesta</h2><p class="muted">Ingresa únicamente con tu código individual autorizado. No solicitamos contraseña, nombre, RUT ni correo electrónico.</p>
       <form id="access-form" class="form"><label class="form-label">Código único de acceso<input id="code" required maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ESM-XXXX-XXXX-XXXX"></label>
       <button class="button primary" type="submit" id="enter">Ingresar a la encuesta →</button></form><div id="form-feedback">${error?banner(error):success?banner(success,false):''}</div>
-      ${notice('Esta encuesta busca mejorar la seguridad. Responde con sinceridad, criterio y responsabilidad. Tu identidad no se solicita y los resultados se analizan de forma agrupada.')}</div>`;
+      ${notice('Esta encuesta busca mejorar la seguridad. No se solicita nombre, RUT ni correo. Área, cargo y turno se utilizan para el análisis administrativo; en grupos muy pequeños, el contexto podría permitir inferencias.')}</div>`;
       $('#access-form').addEventListener('submit',async e=>{e.preventDefault();const submit=$('#enter');submit.disabled=true;$('#form-feedback').innerHTML='';try{
         const result=await rpc('survey_code_claim',{p_code:$('#code').value.trim().toUpperCase()});
         if(result?.status!=='ready'||!result?.ticket)throw Error('Código no autorizado o ya utilizado. Verifica que corresponda al listado oficial de ESM.');
@@ -94,7 +96,7 @@
       return `<div class="question"><div class="tag">PREGUNTA ${i+1} DE ${store.questions.length} · ${esc(q.dimension)}</div><h3>${esc(q.text)}</h3><div class="rating" role="group" aria-label="${esc(q.text)}">${options.map(o=>`<label class="choice"><input type="radio" name="q-${esc(q.id)}" value="${esc(o.value)}" ${String(store.answers[q.id]??'')===o.value?'checked':''} ${required?'required':''}><span>${esc(o.label)}</span></label>`).join('')}</div></div>`;
     }).join('');
     root.innerHTML=intro+`<section class="card"><div class="section-label">ENCUESTA DE EMPODERAMIENTO EN SEGURIDAD</div><h2>Cuéntanos tu experiencia</h2><p class="muted">Selecciona tu área de trabajo, cargo y turno. Después, responde las preguntas según lo que ocurre realmente.</p>
-      ${notice('Encuesta sin nombre, RUT ni correo. El código no se guarda junto a las respuestas. Área, cargo y turno se utilizan exclusivamente para el análisis estadístico agrupado.')}
+      ${notice('Encuesta sin nombre, RUT ni correo. El código no se guarda junto a las respuestas. Área, cargo y turno quedan asociados a la encuesta para el análisis administrativo confidencial.')}
       <form id="survey-form" class="form"><div class="form-grid"><label class="form-label">Área<select name="area" required>${selectOptions(store.areas,'','Selecciona tu área')}</select></label>
       <label class="form-label">Cargo<select name="cargo" required>${selectOptions(store.cargos,'','Selecciona tu cargo')}</select></label>
       <label class="form-label">Turno<select name="turno" required><option value="">Selecciona tu turno</option><option value="A">Turno A</option><option value="B">Turno B</option></select></label></div>
@@ -180,7 +182,7 @@
   function segmentComparison(q,allRows){
     const rows=(allRows||[]).filter(x=>String(x.question_id)===String(q.id));
     const label={area:'Área/faena',cargo:'Cargo',turno:'Turno'};
-    if(!rows.length)return `<details class="segment-details"><summary>Comparación por área, cargo y turno</summary><p class="note">Disponible cuando algún grupo alcance al menos 5 respuestas. Con menos casos, el desglose permanece oculto para proteger el anonimato.</p></details>`;
+    if(!rows.length)return `<details class="segment-details" open><summary>Gráficos por área, cargo y turno</summary><p class="note">Todavía no existen respuestas clasificadas para esta pregunta.</p></details>`;
     const grouped=new Map();
     for(const r of rows){
       const key=r.axis+'|'+r.segment;
@@ -193,16 +195,45 @@
     const legend=(q.choices||[]).map(c=>`<span><i class="seg-color seg-c${esc(c.position)}"></i>${esc(c.text)}</span>`).join('');
     const panels=['area','cargo','turno'].map(axis=>{
       const list=groups.filter(g=>g.axis===axis).sort((a,b)=>(b.attentionPct??-1)-(a.attentionPct??-1)||a.name.localeCompare(b.name,'es'));
-      if(!list.length)return '';
+      if(!list.length)return `<section class="segment-axis"><h4>Gráfico por ${esc(label[axis])}</h4><p class="note">Sin respuestas clasificadas en este eje.</p></section>`;
       const bars=list.map(g=>{
         const pieces=(q.choices||[]).map(c=>{const n=Number(g.counts.get(String(c.id))||0),pct=g.n?round1(n*100/g.n):0;return pct?`<span class="seg-piece seg-c${esc(c.position)}" style="width:${pct}%" title="${esc(c.text)}: ${esc(n)} (${esc(pct)}%)"></span>`:''}).join('');
         return `<div class="segment-row"><div class="segment-row-head"><strong>${esc(g.name)}</strong><span>N=${esc(g.n)}${g.attentionPct==null?'':` · señal de refuerzo ${esc(g.attentionPct)}%`}</span></div><div class="segment-bar">${pieces}</div></div>`;
       }).join('');
-      return `<section class="segment-axis"><h4>${esc(label[axis])}</h4>${bars}</section>`;
+      return `<section class="segment-axis"><h4>Gráfico por ${esc(label[axis])}</h4>${bars}</section>`;
     }).join('');
     const ranked=groups.filter(g=>g.attentionPct!=null).sort((a,b)=>b.attentionPct-a.attentionPct||b.n-a.n);
-    const focus=ranked[0]&&ranked[0].attentionPct>0?`Mayor señal publicable de refuerzo: ${label[ranked[0].axis]} “${ranked[0].name}” (${ranked[0].attentionPct}%, N=${ranked[0].n}).`:'No se observan señales críticas en los grupos que cumplen el mínimo de publicación.';
-    return `<details class="segment-details"><summary>Comparación por área, cargo y turno</summary><p class="note">Las barras muestran cómo se distribuyen las alternativas dentro de cada grupo. Solo se publican grupos con 5 o más respuestas.</p><div class="segment-legend">${legend}</div><div class="segment-focus">${esc(focus)}</div>${panels}</details>`;
+    const focus=ranked[0]&&ranked[0].attentionPct>0?`Mayor señal observada de refuerzo: ${label[ranked[0].axis]} “${ranked[0].name}” (${ranked[0].attentionPct}%, N=${ranked[0].n}).`:'No se observan señales críticas en los grupos analizados.';
+    return `<details class="segment-details" open><summary>Gráficos por área, cargo y turno</summary><p class="note confidentiality-note"><strong>Vista administrativa confidencial:</strong> se muestran resultados desde N=1. Un grupo pequeño puede permitir inferir una respuesta por contexto; no difundas capturas ni resultados individuales.</p><div class="segment-legend">${legend}</div><div class="segment-focus">${esc(focus)}</div><div class="segment-panels">${panels}</div></details>`;
+  }
+  function participationAxes(segments,questions){
+    const first=(questions||[]).find(q=>q.type==='single_choice');
+    const axes={area:new Map(),cargo:new Map(),turno:new Map()};
+    if(!first)return {area:[],cargo:[],turno:[]};
+    for(const r of segments||[]){
+      if(String(r.question_id)!==String(first.id)||!axes[r.axis])continue;
+      const name=String(r.segment||'Sin especificar').trim()||'Sin especificar';
+      if(!axes[r.axis].has(name))axes[r.axis].set(name,Number(r.segment_n||0));
+    }
+    return Object.fromEntries(Object.entries(axes).map(([axis,map])=>[axis,[...map].map(([name,n])=>({name,n})).sort((a,b)=>b.n-a.n||a.name.localeCompare(b.name,'es'))]));
+  }
+  function compactParticipation(items){
+    if((items||[]).length<=5)return items||[];
+    const visible=items.slice(0,5);
+    visible.push({name:`Otros (${items.length-5} grupos)`,n:items.slice(5).reduce((sum,x)=>sum+Number(x.n||0),0)});
+    return visible;
+  }
+  function participationPanel(title,axis,items,total){
+    const rows=compactParticipation(items).map(x=>{
+      const pct=total?round1(Number(x.n||0)*100/total):0;
+      return `<div class="executive-row"><div class="executive-row-head"><strong>${esc(x.name)}</strong><span>${esc(x.n)} · ${esc(pct)}%</span></div><div class="executive-track"><span class="executive-fill executive-${esc(axis)}" style="width:${Math.max(pct?3:0,Math.min(100,pct))}%"></span></div></div>`;
+    }).join('');
+    return `<section class="executive-axis"><h4>${esc(title)}</h4>${rows||'<p class="note">Aún no existen respuestas clasificadas.</p>'}</section>`;
+  }
+  function executiveParticipation(segments,questions,total){
+    const axes=participationAxes(segments,questions);
+    const coverage=`${axes.area.length} área${axes.area.length===1?'':'s'} · ${axes.cargo.length} cargo${axes.cargo.length===1?'':'s'} · ${axes.turno.length} turno${axes.turno.length===1?'':'s'}`;
+    return {axes,html:`<section class="card executive-summary"><div class="executive-heading"><div><div class="section-label">RESUMEN EJECUTIVO</div><h3>Participación por variables operativas</h3><p class="note">Distribución de las encuestas analizadas. Estas barras muestran participación, no nivel de desempeño ni cumplimiento.</p></div><div class="executive-coverage"><strong>${esc(total)}</strong><span>encuestas</span><small>${esc(coverage)}</small></div></div><div class="executive-grid">${participationPanel('Por área/faena','area',axes.area,total)}${participationPanel('Por cargo','cargo',axes.cargo,total)}${participationPanel('Por turno','turno',axes.turno,total)}</div></section>`};
   }
   const advice=dim=>{
     const s=String(dim||'').toLowerCase();
@@ -304,6 +335,8 @@
     const f=store.filters;
     const filtered=Object.values(f).some(Boolean);
     const questions=(data.questions||[]).slice().sort((a,b)=>Number(a.position)-Number(b.position));
+    const participation=executiveParticipation(data.segments,questions,Number(data.selected_n||0));
+    const participatingCargos=participation.axes.cargo.length;
     const choiceSections=questions.filter(q=>q.type==='single_choice').map(q=>{
       const total=Number(q.answered_n||0);
       const rows=(q.choices||[]).map(c=>{
@@ -313,10 +346,10 @@
       return `<section class="card operational-question"><div class="q-meta">PREGUNTA ${esc(q.position)} · ${esc(q.dimension)} · N=${esc(total)}</div><h3>${esc(q.text)}</h3><div class="analysis-note"><div><span>QUÉ BUSCA</span><p>${esc(q.purpose||'Explorar esta dimensión de la experiencia de seguridad.')}</p></div><div><span>QUÉ PUEDE REFLEJAR</span><p>${esc(q.guidance||'Una oportunidad para conversar con el equipo y revisar prácticas de trabajo.')}</p></div></div><div class="answer-list">${rows||'<p class="muted">Aún no hay respuestas.</p>'}</div><div class="current-reading"><strong>Conclusión orientativa</strong><p>${esc(operationalConclusion(q,total))}</p></div>${segmentComparison(q,segments)}</section>`;
     }).join('');
     const comments=(data.comments||[]).map((x,i)=>`<div class="comment-item"><strong>Comentario ${i+1}</strong><p>${esc(x)}</p></div>`).join('');
-    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">RESULTADOS OPERACIONALES · ESM</div><h2>Percepción y prácticas de seguridad</h2><p class="note">El resultado general se muestra desde la primera respuesta. Los filtros continúan protegidos para grupos menores de cinco personas.</p></div><div class="actions"><button class="button" id="export">↓ Exportar Excel</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
+    $('#admin-content').innerHTML=`<div class="toolbar"><div><div class="section-label">RESULTADOS OPERACIONALES · ESM</div><h2>Percepción y prácticas de seguridad</h2><p class="note">El resultado general y los gráficos por área, cargo y turno se muestran desde la primera respuesta. Vista administrativa confidencial.</p></div><div class="actions"><button class="button" id="export">↓ Exportar Excel</button><button class="button" id="print">▣ Imprimir</button><button class="button" id="reload">↻ Actualizar</button></div></div>
       <div class="filters"><label class="form-label">Área<select id="filter-area">${selectOptions(opts.areas,f.area,'Todas las áreas')}</select></label><label class="form-label">Cargo<select id="filter-cargo">${selectOptions(opts.cargos,f.cargo,'Todos los cargos')}</select></label><label class="form-label">Turno<select id="filter-turno">${selectOptions(['A','B'],f.turno,'Ambos turnos')}</select></label></div>
-      <div class="metrics">${metric('Encuestas recibidas',data.responses_total,'Respuestas de la nueva versión')}${metric('Encuestas analizadas',data.suppressed?'Protegido':data.selected_n,filtered?'Selección filtrada':'Resultado general')}${metric('Dimensiones evaluadas',questions.filter(q=>q.type==='single_choice').length,'Una pregunta por dimensión')}${metric('Base anterior','Eliminada','Inicio limpio del instrumento')}</div>
-      ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Resultados protegidos</strong><p>La selección contiene menos de cinco encuestas. Amplía el filtro o reúne más respuestas para evitar la identificación indirecta.</p></div></div>`:`<div class="operational-grid">${choiceSections}</div>${comments?`<section class="card"><h3>Sugerencias abiertas históricas</h3><p class="note">Los comentarios no incluyen nombre, RUT, código ni correo. Revisa si el propio texto contiene datos personales antes de compartirlo.</p>${comments}</section>`:''}`}
+      <div class="metrics">${metric('Encuestas recibidas',data.responses_total,'Respuestas de la nueva versión')}${metric('Encuestas analizadas',data.suppressed?'Protegido':data.selected_n,filtered?'Selección filtrada':'Resultado general')}${metric('Dimensiones evaluadas',questions.filter(q=>q.type==='single_choice').length,'Una pregunta por dimensión')}${metric('Cargos participando',participatingCargos,'Con al menos una encuesta')}</div>
+      ${data.suppressed?`<div class="card privacy"><div class="lock">🔒</div><div><strong>Resultados protegidos</strong><p>La selección contiene menos de cinco encuestas. Amplía el filtro o reúne más respuestas para evitar la identificación indirecta.</p></div></div>`:`${participation.html}<div class="operational-grid">${choiceSections}</div>${comments?`<section class="card"><h3>Sugerencias abiertas históricas</h3><p class="note">Los comentarios no incluyen nombre, RUT, código ni correo. Revisa si el propio texto contiene datos personales antes de compartirlo.</p>${comments}</section>`:''}`}
       <p class="note privacy-note">Uso ético: interpreta tendencias y brechas colectivas. Las alternativas no se presentan como respuestas “buenas” o “malas” y no deben utilizarse para sancionar trabajadores.</p>`;
     ['area','cargo','turno'].forEach(id=>$('#filter-'+id).addEventListener('change',e=>{store.filters[id]=e.target.value;adminDashboard().catch(err=>$('#admin-content').innerHTML=banner(fail(err)));}));
     $('#reload').addEventListener('click',()=>adminDashboard());$('#print').addEventListener('click',()=>print());
@@ -338,8 +371,12 @@
       XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),'Resultados');
       const segmentRows=(data.segments||[]).map(x=>({Pregunta:(data.questions||[]).find(q=>String(q.id)===String(x.question_id))?.position||'',Eje:x.axis,Grupo:x.segment,'N grupo':x.segment_n,Alternativa:x.choice_text,Respuestas:x.n,Puntaje:x.score??''}));
       if(segmentRows.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(segmentRows),'Comparación grupos');
+      const participation=participationAxes(data.segments,data.questions||[]);
+      const participationRows=[];
+      for(const [axis,items] of Object.entries(participation))for(const x of items)participationRows.push({Eje:axis==='area'?'Área/faena':axis==='cargo'?'Cargo':'Turno',Grupo:x.name,Encuestas:x.n,Porcentaje:data.selected_n?round1(Number(x.n||0)*100/Number(data.selected_n)):0});
+      if(participationRows.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(participationRows),'Participación');
       XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(comments),'Comentarios');
-      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Encuestas recibidas',data.responses_total],['Encuestas analizadas',data.selected_n],['Preguntas vigentes',7],['Generado',new Date().toLocaleString('es-CL')]]),'Resumen');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['Encuestas recibidas',data.responses_total],['Encuestas analizadas',data.selected_n],['Preguntas vigentes',7],['Cargos participando',participation.cargo.length],['Generado',new Date().toLocaleString('es-CL')]]),'Resumen');
       XLSX.writeFile(wb,'ESM_resultados_encuesta_operacional.xlsx');
       return;
     }
