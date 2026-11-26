@@ -1,7 +1,24 @@
 /* Capa visual para la encuesta. No sustituye los estilos ni la lógica existentes. */
+@font-face {
+  font-family: "Lato ESM";
+  src: url("./esm-identidad/Lato-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Lato ESM";
+  src: url("./esm-identidad/Lato-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 .esm-encuesta {
   --navy: #003989;
   --primary: #003989;
+  --esm-azul-cabecera: #013989;
   --esm-azul-medio: #25549e;
   --esm-azul-oscuro: #082855;
   --esm-blanco-tenue: #eef4ff;
@@ -13,6 +30,7 @@
   --bg: #f3f7fd;
   --shadow: 0 12px 36px #1237650b;
   --esm-borde-pagina: clamp(1rem, 4vw, 2.65rem);
+  --esm-borde-portada: clamp(1.15rem, 10vw, 12rem);
   margin: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -21,25 +39,25 @@
   min-height: 100dvh;
   background: var(--bg);
   color: var(--ink);
-  font: 1rem/1.55 Lato, "Segoe UI", system-ui, Arial, sans-serif;
+  font: 1rem/1.55 "Lato ESM", Lato, "Segoe UI", system-ui, Arial, sans-serif;
 }
 
 .esm-encuesta :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
 
 .esm-encuesta .topbar {
-  min-height: 5.1rem;
+  min-height: clamp(5rem, 8vw, 6.8rem);
   height: auto;
   grid-template-columns: minmax(8.25rem, 1fr) auto minmax(8.25rem, 1fr);
   gap: .75rem 1.1rem;
-  padding: .65rem max(var(--esm-borde-pagina), calc((100% - 72rem) / 2));
-  border-bottom: 3px solid #fff;
-  background: var(--primary);
+  padding: .65rem var(--esm-borde-portada);
+  border-bottom: 4px solid #fff;
+  background: var(--esm-azul-cabecera);
 }
 
-.esm-encuesta .topbar .brand-logo { width: clamp(7.25rem, 13vw, 9.15rem); height: auto; }
+.esm-encuesta .topbar .brand-logo { width: clamp(7.25rem, 13vw, 8.8rem); height: auto; filter: none; }
 .esm-encuesta .topbar-title {
   color: #fff;
-  font-size: clamp(.9rem, 1.65vw, 1.2rem);
+  font-size: clamp(.9rem, 1.5vw, 1rem);
   font-weight: 700;
   letter-spacing: .075em;
   line-height: 1.27;
@@ -104,15 +122,47 @@
   pointer-events: none;
 }
 
-.esm-encuesta #app:has(> .hero + .entry-card) > .hero {
-  min-height: clamp(16rem, 31vw, 28.5rem);
+.esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) {
+  width: 100%;
+  padding: 0;
+  background: var(--esm-azul-medio);
+}
+
+.esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero {
+  justify-content: center;
+  min-height: clamp(22rem, 33vw, 32.5rem);
+  margin: 0;
+  padding: clamp(2.35rem, 5.4vw, 4.9rem) var(--esm-borde-portada) clamp(5.3rem, 9.2vw, 8.8rem);
+  border-radius: 0;
+  background-color: #08162a;
   background-image:
-    linear-gradient(90deg, #081d3df2, #0b2753b5 53%, #0829554a),
-    linear-gradient(0deg, #041b3ccc, transparent 74%),
-    url("./esm-portada-encuesta.webp");
-  background-position: center, center, 54% 44%;
+    linear-gradient(90deg, #06182bd9 0%, #07192394 51%, #08162a36 100%),
+    linear-gradient(0deg, #0c203e77 0%, transparent 76%),
+    url("./esm-portada-encuesta.webp?v=2");
+  background-position: center, center, center 50%;
   background-size: cover;
   background-repeat: no-repeat;
+}
+
+.esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero::after {
+  right: 0;
+  bottom: -1px;
+  width: 100%;
+  height: clamp(5.25rem, 11.5vw, 10.8rem);
+  background: url("./esm-identidad/curva-esm.svg") center / 100% 100% no-repeat;
+}
+
+.esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero h1 {
+  max-width: 17ch;
+  font-size: clamp(2.35rem, 5.8vw, 5.55rem);
+  line-height: 1.01;
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+  text-wrap: initial;
+}
+
+.esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero p {
+  max-width: min(39rem, 92%);
 }
 
 .esm-encuesta #app > .hero .eyebrow {
@@ -156,6 +206,65 @@
 .esm-encuesta #app > .login-card { border-top: 4px solid var(--esm-azul-medio); }
 .esm-encuesta #app > .login-card { max-width: 35rem; margin: 0 auto; }
 .esm-encuesta #app > .complete { max-width: 43rem; }
+
+.esm-encuesta #app:not(.admin-main) > .entry-card {
+  width: min(65rem, calc(100% - 2 * var(--esm-borde-portada)));
+  margin: 0 auto;
+}
+
+.esm-encuesta #app:not(.admin-main) > .entry-card:has(#access-form) {
+  padding: .5rem 0 clamp(1.6rem, 4vw, 3rem);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  color: #fff;
+}
+
+.esm-encuesta #app > .entry-card:has(#access-form) > .section-label {
+  grid-area: categoria;
+  color: var(--esm-blanco-tenue);
+}
+
+.esm-encuesta #app > .entry-card:has(#access-form) > h2 {
+  grid-area: titulo;
+  margin: .32rem 0 .6rem;
+  color: #fff;
+  font-size: clamp(1.72rem, 3.45vw, 2.8rem);
+  letter-spacing: .005em;
+  text-transform: uppercase;
+}
+
+.esm-encuesta #app > .entry-card:has(#access-form) > .muted {
+  grid-area: introduccion;
+  max-width: 40rem;
+  margin: 0 0 1rem;
+  color: var(--esm-blanco-tenue);
+}
+
+.esm-encuesta #app > .entry-card #access-form {
+  grid-area: formulario;
+  align-self: start;
+  gap: .8rem;
+  min-width: 0;
+  padding: clamp(.9rem, 2.35vw, 1.3rem);
+  border-radius: .8rem;
+  background: #fff;
+}
+
+.esm-encuesta #access-form .button { border-radius: 100vmax; }
+.esm-encuesta #app > .entry-card #form-feedback { grid-area: mensaje; }
+.esm-encuesta #app > .entry-card #form-feedback:empty { display: none; }
+
+.esm-encuesta #app > .entry-card:has(#access-form) > .notice {
+  grid-area: privacidad;
+  margin-top: 1rem;
+  border-color: #ffffff6b;
+  background: #0d386778;
+  color: var(--esm-blanco-tenue);
+}
+
+.esm-encuesta #app > .entry-card:has(#access-form) > .notice .icon { color: #fff; }
 
 .esm-encuesta .card h2,
 .esm-encuesta .headline {
@@ -309,22 +418,23 @@
   padding-block: .9rem;
 }
 
-.esm-encuesta .esm-pie img { width: 7rem; height: auto; filter: brightness(0) invert(1); }
+.esm-encuesta .esm-pie img { width: 7rem; height: auto; }
 .esm-encuesta .esm-pie p { margin: 0; text-align: end; font-size: .875rem; }
 .esm-encuesta .esm-pie span { display: block; color: var(--esm-blanco-tenue); }
 
-@media (min-width: 54rem) {
-  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) {
+@media (min-width: 52rem) {
+  .esm-encuesta #app:not(.admin-main) > .entry-card:has(#access-form) {
     display: grid;
-    grid-template-columns: minmax(0, 1.12fr) minmax(24rem, .88fr);
-    align-items: stretch;
-    align-content: start;
-    gap: 1.15rem;
+    grid-template-columns: minmax(0, 1fr) minmax(20rem, .93fr);
+    grid-template-areas: "categoria formulario" "titulo formulario" "introduccion formulario" "mensaje mensaje" "privacidad privacidad";
+    grid-template-rows: auto auto 1fr auto auto;
+    align-items: start;
+    column-gap: clamp(1.4rem, 4.25vw, 3.7rem);
   }
-  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero { margin: 0; }
 }
 
 @media (max-width: 47.5rem) {
+  .esm-encuesta { --esm-borde-portada: var(--esm-borde-pagina); }
   .esm-encuesta .topbar {
     grid-template-columns: minmax(0, 1fr) auto;
     min-height: 0;
@@ -332,7 +442,14 @@
   }
   .esm-encuesta .topbar-title { justify-self: start; text-align: start; }
   .esm-encuesta #app > .hero { min-height: 0; }
-  .esm-encuesta #app:has(> .hero + .entry-card) > .hero { min-height: 13.7rem; }
+  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero {
+    min-height: 0;
+    padding-block: 1.8rem 4.65rem;
+    background-position: center, center, 57% 50%;
+  }
+  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero h1 { font-size: clamp(1.98rem, 8.5vw, 3.3rem); }
+  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero::after { height: clamp(3rem, 11vw, 5.4rem); }
+  .esm-encuesta #app:not(.admin-main) > .entry-card:has(#access-form) { padding-top: .35rem; }
   .esm-encuesta .admin-main .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -357,5 +474,9 @@
 @media print {
   .esm-encuesta { display: block; background: #fff; }
   .esm-encuesta #app, .esm-encuesta #app.admin-main { width: 100%; padding: 0; }
+  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) { background: #fff; }
+  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero { display: none; }
+  .esm-encuesta #app > .entry-card:has(#access-form) > :is(h2, .section-label, .muted, .notice),
+  .esm-encuesta #app > .entry-card:has(#access-form) > .notice .icon { color: #222; background: #fff; }
   .esm-encuesta .card, .esm-encuesta .metric { box-shadow: none; }
 }
