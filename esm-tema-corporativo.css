@@ -1,0 +1,361 @@
+/* Capa visual para la encuesta. No sustituye los estilos ni la lógica existentes. */
+.esm-encuesta {
+  --navy: #003989;
+  --primary: #003989;
+  --esm-azul-medio: #25549e;
+  --esm-azul-oscuro: #082855;
+  --esm-blanco-tenue: #eef4ff;
+  --ink: #263445;
+  --muted: #465972;
+  --cyan: #25549e;
+  --light: #edf3fd;
+  --border: #cddbec;
+  --bg: #f3f7fd;
+  --shadow: 0 12px 36px #1237650b;
+  --esm-borde-pagina: clamp(1rem, 4vw, 2.65rem);
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+  font: 1rem/1.55 Lato, "Segoe UI", system-ui, Arial, sans-serif;
+}
+
+.esm-encuesta :focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+
+.esm-encuesta .topbar {
+  min-height: 5.1rem;
+  height: auto;
+  grid-template-columns: minmax(8.25rem, 1fr) auto minmax(8.25rem, 1fr);
+  gap: .75rem 1.1rem;
+  padding: .65rem max(var(--esm-borde-pagina), calc((100% - 72rem) / 2));
+  border-bottom: 3px solid #fff;
+  background: var(--primary);
+}
+
+.esm-encuesta .topbar .brand-logo { width: clamp(7.25rem, 13vw, 9.15rem); height: auto; }
+.esm-encuesta .topbar-title {
+  color: #fff;
+  font-size: clamp(.9rem, 1.65vw, 1.2rem);
+  font-weight: 700;
+  letter-spacing: .075em;
+  line-height: 1.27;
+  text-transform: uppercase;
+}
+
+.esm-encuesta .nav-admin {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: .43rem .8rem;
+  border: 1px solid #fff;
+  border-radius: 100vmax;
+  background: #fff;
+  color: var(--primary);
+  font-size: .875rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.esm-encuesta .nav-admin:hover { background: var(--esm-blanco-tenue); }
+.esm-encuesta .topbar :focus-visible { outline-color: #fff; }
+.esm-encuesta.admin-view .topbar {
+  padding-inline: max(var(--esm-borde-pagina), calc((100% - 108rem) / 2));
+}
+
+.esm-encuesta #app {
+  width: min(72rem, calc(100% - 2 * var(--esm-borde-pagina)));
+  max-width: none;
+  min-height: 0;
+  margin: 0 auto;
+  padding: clamp(1.2rem, 3.2vw, 2.8rem) 0 clamp(1.8rem, 4vw, 3.25rem);
+}
+
+.esm-encuesta #app.admin-main { width: min(108rem, calc(100% - 2 * var(--esm-borde-pagina))); }
+
+.esm-encuesta #app > .hero {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: end;
+  min-height: 12rem;
+  margin-bottom: .95rem;
+  padding: clamp(1.3rem, 3vw, 2.2rem);
+  padding-right: max(clamp(1.3rem, 3vw, 2.2rem), 7%);
+  overflow: hidden;
+  border-radius: .8rem;
+  color: #fff;
+  background: linear-gradient(108deg, var(--esm-azul-oscuro), var(--primary) 66%, var(--esm-azul-medio));
+}
+
+.esm-encuesta #app > .hero::after {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  z-index: -1;
+  width: clamp(4.5rem, 19%, 10rem);
+  height: clamp(1.8rem, 6vw, 3.9rem);
+  content: "";
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 65' preserveAspectRatio='none'%3E%3Cpath fill='%23f3f7fd' d='M0 65C75 65 155 43 200 0V65Z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  pointer-events: none;
+}
+
+.esm-encuesta #app:has(> .hero + .entry-card) > .hero {
+  min-height: clamp(16rem, 31vw, 28.5rem);
+  background-image:
+    linear-gradient(90deg, #081d3df2, #0b2753b5 53%, #0829554a),
+    linear-gradient(0deg, #041b3ccc, transparent 74%),
+    url("./esm-portada-encuesta.webp");
+  background-position: center, center, 54% 44%;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.esm-encuesta #app > .hero .eyebrow {
+  color: var(--esm-blanco-tenue);
+  font-size: .875rem;
+  font-weight: 750;
+  letter-spacing: .12em;
+}
+
+.esm-encuesta #app > .hero h1 {
+  max-width: 29ch;
+  margin: .48rem 0 .6rem;
+  color: #fff;
+  font-size: clamp(1.95rem, 3.85vw, 3.45rem);
+  font-weight: 750;
+  line-height: 1.07;
+  letter-spacing: -.025em;
+  text-wrap: balance;
+}
+
+.esm-encuesta #app > .hero p {
+  max-width: min(38rem, 91%);
+  color: var(--esm-blanco-tenue);
+  font-size: clamp(1rem, 1.3vw, 1.08rem);
+  line-height: 1.55;
+}
+
+.esm-encuesta #app:has(#survey-form) > .hero h1 {
+  font-size: clamp(1.78rem, 3.15vw, 2.65rem);
+}
+
+.esm-encuesta .card {
+  padding: clamp(1.1rem, 2.4vw, 1.7rem);
+  border-color: var(--border);
+  border-radius: .8rem;
+  box-shadow: var(--shadow);
+}
+
+.esm-encuesta #app > .entry-card { max-width: none; }
+.esm-encuesta #app > .entry-card,
+.esm-encuesta #app > .login-card { border-top: 4px solid var(--esm-azul-medio); }
+.esm-encuesta #app > .login-card { max-width: 35rem; margin: 0 auto; }
+.esm-encuesta #app > .complete { max-width: 43rem; }
+
+.esm-encuesta .card h2,
+.esm-encuesta .headline {
+  color: var(--primary);
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -.022em;
+}
+
+.esm-encuesta .section-label,
+.esm-encuesta .eyebrow {
+  color: var(--esm-azul-medio);
+  font-size: .875rem;
+  font-weight: 800;
+  letter-spacing: .075em;
+}
+
+.esm-encuesta .note { font-size: .875rem; line-height: 1.43; }
+.esm-encuesta .form-label { min-width: 0; color: var(--ink); font-size: .9rem; }
+.esm-encuesta .form-label :is(input, select, textarea),
+.esm-encuesta .input {
+  min-height: 2.9rem;
+  padding: .58rem .78rem;
+  border: 1px solid #aec2db;
+  border-radius: .55rem;
+  font-size: 1rem;
+}
+
+.esm-encuesta .form-label select:not([multiple]) {
+  appearance: none;
+  padding-right: 2rem;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23003989' stroke-width='1.7' stroke-linejoin='round' stroke-linecap='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E") right .65rem center / 1rem no-repeat;
+}
+
+.esm-encuesta .form-label :is(input, select, textarea):focus,
+.esm-encuesta .input:focus-visible {
+  border-color: var(--esm-azul-medio);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.esm-encuesta #code { font-family: ui-monospace, Consolas, monospace; letter-spacing: .025em; }
+.esm-encuesta #code::placeholder { color: #5b6f88; opacity: 1; }
+.esm-encuesta .button {
+  min-height: 2.75rem;
+  border-color: #b9cde6;
+  border-radius: .58rem;
+  padding: .56rem .88rem;
+  font-size: .9rem;
+  line-height: 1.27;
+}
+
+.esm-encuesta .button.primary { border-color: var(--primary); background: var(--primary); }
+.esm-encuesta .button.primary:hover:not(:disabled) { background: var(--esm-azul-medio); border-color: var(--esm-azul-medio); filter: none; }
+.esm-encuesta .button.danger { border-color: #eacbd0; }
+.esm-encuesta #access-form .button,
+.esm-encuesta #admin-login .button { min-height: 3rem; }
+
+.esm-encuesta .notice {
+  margin-top: 1rem;
+  padding: .72rem .85rem;
+  border-color: #c4d6ef;
+  border-radius: .6rem;
+  background: var(--light);
+  color: #21436c;
+  font-size: .9rem;
+  line-height: 1.47;
+}
+
+.esm-encuesta .notice .icon { color: var(--esm-azul-medio); }
+.esm-encuesta .form-error, .esm-encuesta .form-success { font-size: .9375rem; }
+.esm-encuesta .question .tag { color: var(--esm-azul-medio); font-size: .875rem; }
+.esm-encuesta .question h3 { color: #142d4d; font-size: clamp(1.05rem, 2vw, 1.2rem); }
+.esm-encuesta .choice {
+  align-items: flex-start;
+  gap: .61rem;
+  padding: .71rem .72rem;
+  border-color: #c7d7eb;
+  border-radius: .62rem;
+  color: var(--ink);
+  font-size: .9375rem;
+  line-height: 1.4;
+}
+
+.esm-encuesta .choice input { accent-color: var(--primary); flex: none; margin: .19rem 0 0; }
+.esm-encuesta .choice:hover { border-color: var(--esm-azul-medio); }
+.esm-encuesta .choice:has(input:checked) { background: var(--light); border-color: var(--primary); color: var(--esm-azul-oscuro); }
+.esm-encuesta .choice:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.esm-encuesta #survey-form .form-grid { margin-block-start: .8rem; }
+
+.esm-encuesta .admin-title h1 { color: var(--primary); font-size: clamp(1.8rem, 3.3vw, 2.65rem); line-height: 1.13; }
+.esm-encuesta .admin-title p { margin: .5rem 0 0; }
+.esm-encuesta .admin-tabs {
+  gap: .5rem;
+  padding-bottom: .7rem;
+  border-bottom: 1px solid var(--border);
+  overflow: visible;
+}
+
+.esm-encuesta .admin-tabs button {
+  min-height: 2.75rem;
+  padding: .46rem .82rem;
+  border-color: #b9cde6;
+  border-radius: .55rem;
+  color: var(--primary);
+  font-size: .9rem;
+}
+
+.esm-encuesta .admin-tabs button:not(.active):hover { background: var(--light); }
+.esm-encuesta .admin-tabs button.active { color: #fff; border-color: var(--primary); background: var(--primary); }
+.esm-encuesta .metric { border-radius: .68rem; }
+.esm-encuesta .metric .m-label { color: #3d5c83; font-size: .813rem; }
+.esm-encuesta .metric .m-sub { font-size: .813rem; }
+.esm-encuesta .metric strong { font-variant-numeric: tabular-nums; }
+
+.esm-encuesta .executive-summary { border-top: 4px solid var(--esm-azul-medio); }
+.esm-encuesta .executive-heading h3 { color: var(--primary); }
+.esm-encuesta .executive-coverage { border-color: var(--border); background: var(--light); }
+.esm-encuesta .executive-coverage strong,
+.esm-encuesta .executive-coverage span,
+.esm-encuesta .executive-axis h4 { color: var(--primary); }
+.esm-encuesta .executive-axis { border-color: var(--border); background: #fbfdff; }
+.esm-encuesta .track, .esm-encuesta .executive-track { background: #e2ebf8; }
+.esm-encuesta .fill:not(.warn, .low), .esm-encuesta .executive-area { background: var(--primary); }
+.esm-encuesta .executive-cargo { background: #5482bc; }
+.esm-encuesta .operational-question .q-meta { color: var(--esm-azul-medio); font-size: .813rem; }
+.esm-encuesta .analysis-note > div { border-color: #b5cced; background: #eaf2ff; }
+.esm-encuesta .analysis-note span { color: var(--primary); font-size: .813rem; }
+.esm-encuesta .analysis-note p, .esm-encuesta .current-reading p { color: #264466; font-size: .875rem; }
+.esm-encuesta .current-reading { border-color: var(--esm-azul-medio); background: #f0f5fd; }
+.esm-encuesta .current-reading strong { color: var(--primary); font-size: .9rem; }
+.esm-encuesta .segment-details summary, .esm-encuesta .segment-axis h4 { color: var(--primary); }
+.esm-encuesta .segment-details[open] summary, .esm-encuesta .segment-focus { background: var(--light); }
+.esm-encuesta .segment-focus { color: #21436c; }
+.esm-encuesta .table th { background: var(--light); color: var(--esm-azul-oscuro); }
+.esm-encuesta .archive-list-item.active { border-color: var(--esm-azul-medio); background: var(--light); box-shadow: inset 4px 0 var(--esm-azul-medio); }
+
+.esm-encuesta .footer {
+  padding: 0 max(var(--esm-borde-pagina), calc((100% - 72rem) / 2));
+  border-top: 3px solid #fff;
+  background: var(--primary);
+  color: #fff;
+}
+
+.esm-encuesta .esm-pie {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem 1.3rem;
+  padding-block: .9rem;
+}
+
+.esm-encuesta .esm-pie img { width: 7rem; height: auto; filter: brightness(0) invert(1); }
+.esm-encuesta .esm-pie p { margin: 0; text-align: end; font-size: .875rem; }
+.esm-encuesta .esm-pie span { display: block; color: var(--esm-blanco-tenue); }
+
+@media (min-width: 54rem) {
+  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) {
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(24rem, .88fr);
+    align-items: stretch;
+    align-content: start;
+    gap: 1.15rem;
+  }
+  .esm-encuesta #app:not(.admin-main):has(> .hero + .entry-card) > .hero { margin: 0; }
+}
+
+@media (max-width: 47.5rem) {
+  .esm-encuesta .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 0;
+    padding-block: .7rem .55rem;
+  }
+  .esm-encuesta .topbar-title { justify-self: start; text-align: start; }
+  .esm-encuesta #app > .hero { min-height: 0; }
+  .esm-encuesta #app:has(> .hero + .entry-card) > .hero { min-height: 13.7rem; }
+  .esm-encuesta .admin-main .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 38.75rem) {
+  .esm-encuesta .rating { grid-template-columns: minmax(0, 1fr); }
+  .esm-encuesta .button, .esm-encuesta .admin-tabs button { white-space: normal; }
+  .esm-encuesta .admin-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .esm-encuesta .admin-tabs button { padding-inline: .42rem; overflow-wrap: anywhere; }
+  .esm-encuesta .esm-pie { align-items: flex-start; flex-direction: column; }
+  .esm-encuesta .esm-pie p { text-align: start; }
+}
+
+@media (max-width: 22rem) {
+  .esm-encuesta .nav-admin { padding-inline: .56rem; }
+  .esm-encuesta #app > .hero p { max-width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .esm-encuesta .spinner { animation: none; }
+}
+
+@media print {
+  .esm-encuesta { display: block; background: #fff; }
+  .esm-encuesta #app, .esm-encuesta #app.admin-main { width: 100%; padding: 0; }
+  .esm-encuesta .card, .esm-encuesta .metric { box-shadow: none; }
+}
